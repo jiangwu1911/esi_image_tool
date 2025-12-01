@@ -1,4 +1,5 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import Toolbar from './Toolbar';
 
 const ImageViewer = ({ 
   imageUrl, 
@@ -12,6 +13,10 @@ const ImageViewer = ({
   language = 'en'
 }) => {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const canvasContainerRef = useRef(null);
+  
+  // 状态
   const [drawing, setDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState(null);
   const [currentPoint, setCurrentPoint] = useState(null);
@@ -20,40 +25,17 @@ const ImageViewer = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageObj, setImageObj] = useState(null);
+  const [transform, setTransform] = useState({
+    scale: 1,
+    rotation: 0,
+    translateX: 0,
+    translateY: 0
+  });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
-  // 当工具从select切换到其他工具时，取消选择当前标注
-  useEffect(() => {
-    if (selectedTool !== 'select' && selectedAnnotation) {
-      setSelectedAnnotation(null);
-    }
-  }, [selectedTool, selectedAnnotation]);
-
-  // 加载图像
-  useEffect(() => {
-    if (imageUrl) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        setImageObj(img);
-        setImageLoaded(true);
-        // 初始化画布大小
-        if (canvasRef.current) {
-          canvasRef.current.width = img.width;
-          canvasRef.current.height = img.height;
-        }
-      };
-      img.onerror = (err) => {
-        console.error('Failed to load image:', err);
-        setImageLoaded(false);
-      };
-      img.src = `http://localhost:5000${imageUrl}`;
-    } else {
-      setImageLoaded(false);
-      setImageObj(null);
-    }
-  }, [imageUrl]);
-
-  // 检查点是否在标注内
+  // 工具函数定义在组件内部但不是作为useCallback
   const isPointInAnnotation = (point, annotation) => {
     const coords = annotation.coordinates;
     
@@ -63,24 +45,20 @@ const ImageViewer = ({
                point.x <= coords.x + coords.width && 
                point.y >= coords.y && 
                point.y <= coords.y + coords.height;
-      
       case 'circle':
         const distance = Math.sqrt(
           Math.pow(point.x - coords.x, 2) + Math.pow(point.y - coords.y, 2)
         );
         return distance <= coords.radius;
-      
       case 'ellipse':
         const normalizedX = (point.x - coords.x) / coords.radiusX;
         const normalizedY = (point.y - coords.y) / coords.radiusY;
         return (normalizedX * normalizedX + normalizedY * normalizedY) <= 1;
-      
       default:
         return false;
     }
   };
 
-  // 获取鼠标位置的标注
   const getAnnotationAtPoint = (x, y) => {
     const point = { x, y };
     // 从后往前检查，这样最后绘制的标注（在顶部）先被选中
@@ -92,28 +70,23 @@ const ImageViewer = ({
     return null;
   };
 
-  // 检查标注是否足够大
   const isAnnotationValid = (shapeType, coordinates) => {
     if (!coordinates) return false;
     
-    const MIN_SIZE = 5; // 最小5像素
+    const MIN_SIZE = 5;
     
     switch (shapeType) {
       case 'rectangle':
         return coordinates.width > MIN_SIZE && coordinates.height > MIN_SIZE;
-      
       case 'circle':
         return coordinates.radius > MIN_SIZE;
-      
       case 'ellipse':
         return coordinates.radiusX > MIN_SIZE && coordinates.radiusY > MIN_SIZE;
-      
       default:
         return false;
     }
   };
 
-  // 计算坐标
   const calculateCoordinates = (shapeType, startX, startY, endX, endY) => {
     switch (shapeType) {
       case 'rectangle':
@@ -135,20 +108,124 @@ const ImageViewer = ({
     }
   };
 
+  const getCanvasCoordinates = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    
+    // 获取相对于画布容器的坐标
+    const container = canvasContainerRef.current;
+    const rect = container.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    
+    // 减去容器内边距和偏移
+    const containerRect = container.getBoundingClientRect();
+    x -= (containerRect.width - canvas.width * transform.scale) / 2;
+    y -= (containerRect.height - canvas.height * transform.scale) / 2;
+    
+    // 应用缩放
+    x /= transform.scale;
+    y /= transform.scale;
+    
+    // 应用旋转
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    
+    const rad = transform.rotation * Math.PI / 180;
+    const cos = Math.cos(-rad);
+    const sin = Math.sin(-rad);
+    
+    const rotatedX = cos * (x - centerX) - sin * (y - centerY) + centerX;
+    const rotatedY = sin * (x - centerX) + cos * (y - centerY) + centerY;
+    
+    return { x: rotatedX, y: rotatedY };
+  };
+
+  // 变换功能
+  const handleZoomIn = () => {
+    setTransform(prev => ({
+      ...prev,
+      scale: Math.min(prev.scale * 1.2, 5)
+    }));
+  };
+
+  const handleZoomOut = () => {
+    setTransform(prev => ({
+      ...prev,
+      scale: Math.max(prev.scale / 1.2, 0.2)
+    }));
+  };
+
+  const handleRotate = () => {
+    setTransform(prev => ({
+      ...prev,
+      rotation: (prev.rotation + 90) % 360
+    }));
+  };
+
+  const handlePanStart = () => {
+    setIsPanning(true);
+  };
+
+  const handlePanEnd = () => {
+    setIsPanning(false);
+    setPanStart({ x: 0, y: 0 });
+  };
+
+  const handleReset = () => {
+    setTransform({
+      scale: 1,
+      rotation: 0,
+      translateX: 0,
+      translateY: 0
+    });
+  };
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // 获取鼠标相对于canvas容器的位置
+    const container = canvasContainerRef.current;
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    const oldScale = transform.scale;
+    const newScale = Math.max(0.2, Math.min(5, oldScale * (1 + delta)));
+    
+    // 更新缩放
+    setTransform(prev => ({
+      ...prev,
+      scale: newScale
+    }));
+  };
+
   // 绘制函数
-  const drawAll = useCallback((start = null, end = null) => {
+  const drawAll = (start = null, end = null) => {
     const canvas = canvasRef.current;
     if (!canvas || !imageLoaded || !imageObj) return;
     
     const ctx = canvas.getContext('2d');
     
-    // 1. 清除画布
+    // 清除画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 2. 绘制图像
-    ctx.drawImage(imageObj, 0, 0);
+    // 保存当前画布状态
+    ctx.save();
     
-    // 3. 绘制所有已保存的标注
+    // 应用变换（这里只应用旋转，缩放通过CSS实现）
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(transform.rotation * Math.PI / 180);
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    
+    // 绘制图像
+    ctx.drawImage(imageObj, 0, 0, canvas.width, canvas.height);
+    
+    // 绘制所有已保存的标注
     annotations.forEach(ann => {
       const isSelected = ann.id === selectedAnnotation?.id;
       const annColor = ann.color || color;
@@ -186,17 +263,16 @@ const ImageViewer = ({
         ctx.fillText(ann.label, ann.coordinates.x, ann.coordinates.y - 10);
       }
 
-      // 重置虚线
       ctx.setLineDash([]);
     });
     
-    // 4. 如果正在绘制，绘制预览
+    // 如果正在绘制，绘制预览
     if (start && end && selectedTool && selectedTool !== 'select') {
       const previewCoords = calculateCoordinates(selectedTool, start.x, start.y, end.x, end.y);
       if (previewCoords && isAnnotationValid(selectedTool, previewCoords)) {
         ctx.strokeStyle = color;
         ctx.lineWidth = lineWidth;
-        ctx.setLineDash([5, 5]); // 预览使用虚线
+        ctx.setLineDash([5, 5]);
         
         switch (selectedTool) {
           case 'rectangle':
@@ -217,48 +293,42 @@ const ImageViewer = ({
         ctx.setLineDash([]);
       }
     }
-  }, [imageLoaded, imageObj, annotations, selectedAnnotation, selectedTool, color, lineWidth]);
-
-  // 当标注变化时重绘
-  useEffect(() => {
-    if (!drawing) {
-      drawAll();
-    }
-  }, [annotations, selectedAnnotation, imageLoaded, drawing, drawAll]);
-
-  // 当绘制状态变化时重绘（显示/隐藏预览）
-  useEffect(() => {
-    if (drawing && startPoint && currentPoint) {
-      drawAll(startPoint, currentPoint);
-    }
-  }, [drawing, startPoint, currentPoint, drawAll]);
-
-  // 获得画布坐标
-  const getCanvasCoordinates = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
     
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    return { x, y };
+    // 恢复画布状态
+    ctx.restore();
   };
 
-  // 处理鼠标按下
+  // 更新画布容器样式
+  const updateCanvasContainerStyle = () => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+    
+    container.style.transform = `
+      scale(${transform.scale})
+      rotate(${transform.rotation}deg)
+      translate(${transform.translateX}px, ${transform.translateY}px)
+    `;
+    container.style.transformOrigin = 'center center';
+    container.style.transition = 'transform 0.1s ease-out';
+  };
+
+  // 事件处理函数
   const handleMouseDown = (e) => {
+    if (isPanning) {
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
     const coords = getCanvasCoordinates(e);
     if (!coords) return;
     
     const { x, y } = coords;
 
     if (selectedTool === 'select') {
-      // 选择模式
       const annotation = getAnnotationAtPoint(x, y);
       if (annotation) {
         setSelectedAnnotation(annotation);
         setDragging(true);
-        // 计算拖拽偏移量
         const annCoords = annotation.coordinates;
         setDragOffset({
           x: x - annCoords.x,
@@ -268,48 +338,59 @@ const ImageViewer = ({
         setSelectedAnnotation(null);
       }
     } else if (selectedTool && selectedTool !== 'select') {
-      // 绘制模式
       setDrawing(true);
       setStartPoint({ x, y });
       setCurrentPoint({ x, y });
     }
   };
 
-  // 处理鼠标移动
   const handleMouseMove = (e) => {
+    if (isPanning && panStart.x !== 0 && panStart.y !== 0) {
+      const deltaX = e.clientX - panStart.x;
+      const deltaY = e.clientY - panStart.y;
+      
+      setTransform(prev => ({
+        ...prev,
+        translateX: prev.translateX + deltaX,
+        translateY: prev.translateY + deltaY
+      }));
+      
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
     const coords = getCanvasCoordinates(e);
     if (!coords) return;
     
     const { x, y } = coords;
 
     if (dragging && selectedAnnotation) {
-      // 拖拽模式
       const newCoords = { ...selectedAnnotation.coordinates };
       newCoords.x = x - dragOffset.x;
       newCoords.y = y - dragOffset.y;
       
-      // 更新标注位置
       if (onAnnotationUpdate) {
         onAnnotationUpdate(selectedAnnotation.id, { coordinates: newCoords });
       }
     } else if (drawing && startPoint) {
-      // 更新当前点用于预览
       setCurrentPoint({ x, y });
     }
   };
 
-  // 处理鼠标抬起
   const handleMouseUp = (e) => {
+    if (isPanning) {
+      setPanStart({ x: 0, y: 0 });
+      return;
+    }
+
     const coords = getCanvasCoordinates(e);
     if (!coords) return;
     
     const { x, y } = coords;
 
     if (drawing && startPoint && selectedTool && selectedTool !== 'select') {
-      // 完成绘制
       const coordinates = calculateCoordinates(selectedTool, startPoint.x, startPoint.y, x, y);
       
-      // 检查标注是否有效（足够大）
       if (coordinates && isAnnotationValid(selectedTool, coordinates) && onAnnotationCreate) {
         onAnnotationCreate({
           shape_type: selectedTool,
@@ -321,19 +402,89 @@ const ImageViewer = ({
       }
     }
 
-    // 重置状态
     setDrawing(false);
     setStartPoint(null);
     setCurrentPoint(null);
     setDragging(false);
     
-    // 重绘以清除预览
     drawAll();
   };
+
+  // 当工具从select切换到其他工具时，取消选择当前标注
+  useEffect(() => {
+    if (selectedTool !== 'select' && selectedAnnotation) {
+      setSelectedAnnotation(null);
+    }
+  }, [selectedTool, selectedAnnotation]);
+
+  // 加载图像
+  useEffect(() => {
+    if (imageUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        setImageObj(img);
+        setImageLoaded(true);
+        if (canvasRef.current) {
+          canvasRef.current.width = img.width;
+          canvasRef.current.height = img.height;
+          setCanvasSize({ width: img.width, height: img.height });
+        }
+        setTransform({
+          scale: 1,
+          rotation: 0,
+          translateX: 0,
+          translateY: 0
+        });
+      };
+      img.onerror = (err) => {
+        console.error('Failed to load image:', err);
+        setImageLoaded(false);
+      };
+      img.src = `http://localhost:5000${imageUrl}`;
+    } else {
+      setImageLoaded(false);
+      setImageObj(null);
+      setCanvasSize({ width: 0, height: 0 });
+    }
+  }, [imageUrl]);
+
+  // 当标注变化时重绘
+  useEffect(() => {
+    if (!drawing) {
+      drawAll();
+    }
+  }, [annotations, selectedAnnotation, imageLoaded, drawing]);
+
+  // 当绘制状态变化时重绘（显示/隐藏预览）
+  useEffect(() => {
+    if (drawing && startPoint && currentPoint) {
+      drawAll(startPoint, currentPoint);
+    }
+  }, [drawing, startPoint, currentPoint]);
+
+  // 当变换变化时重绘
+  useEffect(() => {
+    drawAll();
+    updateCanvasContainerStyle();
+  }, [transform]);
 
   // 处理键盘事件
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // 缩放快捷键
+      if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+        e.preventDefault();
+        handleZoomIn();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault();
+        handleZoomOut();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        handleReset();
+      }
+      
+      // 原有的删除和ESC逻辑
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAnnotation) {
         if (onAnnotationDelete) {
           onAnnotationDelete(selectedAnnotation.id);
@@ -341,27 +492,74 @@ const ImageViewer = ({
         }
       }
       
-      // 按ESC键取消选择
+      // 按ESC键取消选择或平移模式
       if (e.key === 'Escape') {
-        if (selectedAnnotation) {
+        if (isPanning) {
+          handlePanEnd();
+        } else if (selectedAnnotation) {
           setSelectedAnnotation(null);
-          drawAll(); // 重绘以清除选择状态
+          drawAll();
         } else if (drawing) {
-          // 如果正在绘制，取消绘制
           setDrawing(false);
           setStartPoint(null);
           setCurrentPoint(null);
-          drawAll(); // 重绘以清除预览
+          drawAll();
+        }
+      }
+      
+      // 空格键启动平移模式
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (isPanning) {
+          handlePanEnd();
+        } else {
+          handlePanStart();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedAnnotation, onAnnotationDelete, drawing, drawAll]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedAnnotation, isPanning, drawing]);
+
+  // 更新光标样式
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      if (isPanning) {
+        container.style.cursor = 'grabbing';
+      } else if (selectedTool === 'select') {
+        container.style.cursor = dragging ? 'grabbing' : 'grab';
+      } else {
+        container.style.cursor = 'crosshair';
+      }
+    }
+  }, [isPanning, selectedTool, dragging]);
 
   return (
-    <div className="image-viewer">
+    <div 
+      ref={containerRef}
+      className="image-viewer"
+      onWheel={handleWheel}
+    >
+      <Toolbar
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onRotate={handleRotate}
+        onPan={isPanning ? handlePanEnd : handlePanStart}
+        onReset={handleReset}
+        language={language}
+        isPanning={isPanning}
+      />
+      
+      <div className="transform-info">
+        <span style={{color: 'white'}}>{language === 'zh' ? '缩放: ' : 'Zoom: '}{transform.scale.toFixed(2)}x</span>
+        <span style={{color: 'white'}}>{language === 'zh' ? '旋转: ' : 'Rotation: '}{transform.rotation}°</span>
+        {isPanning && <span style={{color: 'white'}}>{language === 'zh' ? '平移模式 (空格键退出)' : 'Panning Mode (Space to exit)'}</span>}
+      </div>
+ 
       {selectedTool === 'select' && selectedAnnotation && (
         <div className="selection-info">
           {language === 'zh' 
@@ -370,38 +568,57 @@ const ImageViewer = ({
           }
         </div>
       )}
+      
       {!imageLoaded && imageUrl && (
         <div className="loading-overlay">
           {language === 'zh' ? '加载图像中...' : 'Loading image...'}
         </div>
       )}
       
-      <canvas
-        ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => {
-          // 鼠标离开画布时取消状态
-          if (dragging || drawing) {
-            setDrawing(false);
-            setDragging(false);
-            setStartPoint(null);
-            setCurrentPoint(null);
-            drawAll(); // 重绘以清除预览
-          }
+      {/* 新增的画布容器，用于包裹canvas并应用CSS变换 */}
+      <div 
+        ref={canvasContainerRef}
+        className="canvas-container"
+        style={{
+          display: imageLoaded ? 'flex' : 'none',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: canvasSize.width * transform.scale,
+          height: canvasSize.height * transform.scale,
+          transform: `
+            scale(${transform.scale})
+            rotate(${transform.rotation}deg)
+            translate(${transform.translateX}px, ${transform.translateY}px)
+          `,
+          transformOrigin: 'center center',
         }}
-        style={{ 
-          cursor: selectedTool === 'select' ? 
-            (dragging ? 'grabbing' : 'grab') : 'crosshair',
-          display: imageLoaded ? 'block' : 'none',
-          border: '1px solid #ccc',
-          maxWidth: '90vw',
-          maxHeight: '70vh',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-          backgroundColor: 'white'
-        }}
-      />
+      >
+        <canvas
+          ref={canvasRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => {
+            if (dragging || drawing) {
+              setDrawing(false);
+              setDragging(false);
+              setStartPoint(null);
+              setCurrentPoint(null);
+              drawAll();
+            }
+            if (isPanning) {
+              setPanStart({ x: 0, y: 0 });
+            }
+          }}
+          style={{ 
+            border: '1px solid #2c3e50',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            backgroundColor: 'white',
+            cursor: selectedTool === 'select' ? 
+              (dragging ? 'grabbing' : 'grab') : 'crosshair'
+          }}
+        />
+      </div>
     </div>
   );
 };
