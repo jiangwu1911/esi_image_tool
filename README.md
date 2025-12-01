@@ -1,2 +1,5 @@
 # esi_image_tool
-ESI image tool
+
+安装npm modules
+    npm install --registry=https://registry.npmmirror.com
+

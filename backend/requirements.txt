@@ -1,0 +1,7 @@
+Flask
+Flask-CORS
+Flask-SQLAlchemy
+mysql-connector-python
+pydicom
+Pillow
+numpy

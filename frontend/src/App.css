@@ -1,0 +1,605 @@
+/* 基础样式 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #1a2435;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #1a2435;
+}
+
+/* 头部样式 - 改为与左右侧栏相同的颜色 */
+.app-header {
+  background-color: #1a2435;
+  color: white;
+  padding: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+  position: relative;
+  border-bottom: 1px solid #2c3e50;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+/* 头部控制 */
+.header-controls {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.language-selector {
+  display: inline-block;
+}
+
+.language-dropdown {
+  padding: 6px 12px;
+  border: 1px solid #2c3e50;
+  border-radius: 4px;
+  background-color: #233143;
+  font-size: 14px;
+  cursor: pointer;
+  color: white;
+}
+
+.language-dropdown option {
+  padding: 4px;
+  background-color: #1a2435;
+  color: white;
+}
+
+/* 主内容区域布局 */
+.app-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  background-color: #1a2435;
+}
+
+/* 左侧栏样式 */
+.left-sidebar {
+  width: 320px;
+  background-color: #1a2435;
+  border-right: 1px solid #2c3e50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  color: white;
+}
+
+/* 中间图像显示区域 - 改为与侧边栏相同的颜色 */
+.main-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #1a2435;
+  overflow: hidden;
+}
+
+/* 右侧栏样式 */
+.right-sidebar {
+  width: 280px;
+  background-color: #1a2435;
+  border-left: 1px solid #2c3e50;
+  overflow-y: auto;
+  flex-shrink: 0;
+  color: white;
+}
+
+/* 文件上传样式 */
+.file-upload {
+  padding: 1rem;
+  background-color: #233143;
+  border-bottom: 1px solid #2c3e50;
+  color: white;
+}
+
+.file-upload h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.upload-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.upload-button {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.upload-button:hover {
+  background-color: #0056b3;
+}
+
+.upload-button:disabled {
+  background-color: #4a5568;
+  cursor: not-allowed;
+}
+
+.message {
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.message.success {
+  background-color: #155724;
+  color: #d4edda;
+  border: 1px solid #0c4121;
+}
+
+.message.error {
+  background-color: #721c24;
+  color: #f8d7da;
+  border: 1px solid #4a1217;
+}
+
+/* 树状视图样式 */
+.tree-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #233143;
+  border-bottom: 1px solid #2c3e50;
+  color: white;
+}
+
+.tree-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.refresh-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: white;
+}
+
+.refresh-btn:hover {
+  background-color: #2c3e50;
+}
+
+.tree-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background-color: #1a2435;
+}
+
+.tree-item {
+  margin-bottom: 2px;
+}
+
+.tree-item-header {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  min-height: 56px;
+  color: white;
+}
+
+.tree-item-header:hover {
+  background-color: #233143;
+}
+
+.expand-icon {
+  margin-right: 8px;
+  font-size: 10px;
+  width: 12px;
+  text-align: center;
+  cursor: pointer;
+  color: #a0aec0;
+}
+
+.item-icon {
+  margin-right: 8px;
+  font-size: 14px;
+  color: #a0aec0;
+}
+
+.item-name {
+  flex: 1;
+  font-size: 14px;
+  color: white;
+}
+
+.instance-container {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.thumbnail {
+  width: 48px;
+  height: 48px;
+  margin-right: 12px;
+  border: 1px solid #4a5568;
+  border-radius: 4px;
+  cursor: pointer;
+  object-fit: contain;
+  background-color: #2d3748;
+}
+
+.thumbnail:hover {
+  border-color: #007bff;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+
+.instance-name {
+  flex: 1;
+  font-size: 14px;
+  cursor: pointer;
+  color: #63b3ed;
+  text-decoration: underline;
+}
+
+.instance-name:hover {
+  color: #90cdf4;
+}
+
+.item-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.delete-btn {
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  background: none;
+  border: none;
+  color: #e53e3e;
+}
+
+.delete-btn:hover {
+  background-color: rgba(229, 62, 62, 0.2);
+}
+
+.tree-children {
+  margin-left: 20px;
+  border-left: 1px solid #2c3e50;
+}
+
+.loading, .no-data {
+  padding: 1rem;
+  text-align: center;
+  color: #a0aec0;
+}
+
+/* 查看器容器 */
+.viewer-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow: auto;
+  background-color: #1a2435;
+}
+
+/* 图像查看器 */
+.image-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.image-viewer canvas {
+  max-width: 90vw;
+  max-height: 70vh;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background-color: #2d3748;
+  border: 1px solid #4a5568;
+}
+
+/* 欢迎消息 */
+.welcome-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: #a0aec0;
+  padding: 2rem;
+  background-color: #1a2435;
+}
+
+.welcome-message h2 {
+  margin-bottom: 1rem;
+  color: white;
+}
+
+/* 加载状态样式 */
+.loading-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  width: 100%;
+  background-color: rgba(26, 36, 53, 0.8);
+  color: #a0aec0;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+/* 选中状态的标注信息 */
+.selection-info {
+  background-color: #155724;
+  color: #d4edda;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 14px;
+  text-align: center;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 标注控制面板样式 */
+.annotation-controls {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #1a2435;
+  color: white;
+}
+
+.annotation-controls h3 {
+  margin: 0;
+  padding: 1rem;
+  background-color: #233143;
+  border-bottom: 1px solid #2c3e50;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.controls-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  background-color: #1a2435;
+}
+
+.tools-section, .control-section {
+  margin-bottom: 1.5rem;
+}
+
+.annotation-controls h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 14px;
+  color: #cbd5e0;
+  font-weight: 600;
+}
+
+/* 工具按钮 */
+.tool-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 0.5rem;
+  border: 2px solid #2c3e50;
+  border-radius: 6px;
+  background: #233143;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 60px;
+  color: white;
+}
+
+.tool-btn:hover {
+  border-color: #007bff;
+  background-color: #2c3e50;
+  transform: translateY(-1px);
+}
+
+.tool-btn.active {
+  border-color: #007bff;
+  background-color: #007bff;
+  color: white;
+}
+
+.tool-icon {
+  font-size: 18px;
+  margin-bottom: 0.5rem;
+}
+
+.tool-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 线宽按钮 */
+.line-width-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.width-btn {
+  padding: 0.75rem;
+  border: 2px solid #2c3e50;
+  border-radius: 6px;
+  background: #233143;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  color: white;
+}
+
+.width-btn:hover {
+  border-color: #007bff;
+  background-color: #2c3e50;
+}
+
+.width-btn.active {
+  border-color: #007bff;
+  background-color: #2c3e50;
+}
+
+.width-preview {
+  width: 100%;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+  background-color: white;
+}
+
+/* 颜色按钮 */
+.color-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.color-btn {
+  padding: 0.75rem;
+  border: 2px solid #2c3e50;
+  border-radius: 6px;
+  background: #233143;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.color-btn:hover {
+  border-color: #007bff;
+  background-color: #2c3e50;
+}
+
+.color-btn.active {
+  border-color: white;
+  background-color: #2c3e50;
+}
+
+.color-preview {
+  width: 100%;
+  height: 24px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+/* 使用说明 */
+.instructions {
+  margin-top: auto;
+  padding-top: 1.5rem;
+  border-top: 1px solid #2c3e50;
+}
+
+.instructions h4 {
+  margin-bottom: 0.75rem;
+  color: #cbd5e0;
+}
+
+.instructions ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 13px;
+  color: #a0aec0;
+  line-height: 1.5;
+}
+
+.instructions li {
+  margin-bottom: 0.5rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .left-sidebar {
+    width: 280px;
+  }
+  
+  .right-sidebar {
+    width: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-content {
+    flex-direction: column;
+  }
+  
+  .left-sidebar,
+  .right-sidebar {
+    width: 100%;
+    height: auto;
+  }
+  
+  .left-sidebar {
+    border-right: none;
+    border-bottom: 1px solid #2c3e50;
+  }
+  
+  .right-sidebar {
+    border-left: none;
+    border-top: 1px solid #2c3e50;
+  }
+}
