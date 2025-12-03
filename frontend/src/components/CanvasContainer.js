@@ -1,4 +1,4 @@
-// CanvasContainer.js
+// CanvasContainer.js - 直接修复鼠标事件绑定
 import React from 'react';
 
 const CanvasContainer = ({
@@ -34,7 +34,6 @@ const CanvasContainer = ({
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
     backgroundColor: 'white',
     cursor: canvasCursor,
-    // 所有变换都在这里应用
     transform: `
       translate(${transform.translateX}px, ${transform.translateY}px)
       rotate(${transform.rotation}deg)
@@ -49,6 +48,37 @@ const CanvasContainer = ({
     transition: isPanning ? 'none' : 'transform 0.1s ease-out',
   };
 
+  // 关键修复：创建确保被调用的包装函数
+  const handleMouseDownWrapper = (e) => {
+    console.log('Canvas mouse down triggered');
+    e.preventDefault();
+    if (handleMouseDown) {
+      handleMouseDown(e);
+    }
+  };
+
+  const handleMouseUpWrapper = (e) => {
+    console.log('Canvas mouse up triggered'); // 添加日志确认事件触发
+    e.preventDefault();
+    if (handleMouseUp) {
+      handleMouseUp(e);
+    }
+  };
+
+  const handleMouseMoveWrapper = (e) => {
+    e.preventDefault();
+    if (handleMouseMove) {
+      handleMouseMove(e);
+    }
+  };
+
+  const handleDoubleClickWrapper = (e) => {
+    e.preventDefault();
+    if (handleDoubleClick) {
+      handleDoubleClick(e);
+    }
+  };
+
   return (
     <div 
       ref={canvasContainerRef}
@@ -57,12 +87,14 @@ const CanvasContainer = ({
     >
       <canvas
         ref={canvasRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onDoubleClick={handleDoubleClick}
+        onMouseDown={handleMouseDownWrapper}
+        onMouseMove={handleMouseMoveWrapper}
+        onMouseUp={handleMouseUpWrapper}
+        onDoubleClick={handleDoubleClickWrapper}
         onMouseLeave={handleMouseLeave}
         style={canvasStyle}
+        width={canvasSize.width}
+        height={canvasSize.height}
       />
     </div>
   );
