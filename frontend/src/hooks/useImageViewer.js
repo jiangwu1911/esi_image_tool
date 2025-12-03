@@ -1,5 +1,6 @@
 // useImageViewer.js
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { PathRenderer } from '../renderers/PathRenderer';
 
 export const useImageViewer = ({
   imageUrl,
@@ -34,8 +35,14 @@ export const useImageViewer = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  
+  // 新工具的状态
+  const [splinePoints, setSplinePoints] = useState([]);
+  const [freehandPoints, setFreehandPoints] = useState([]);
+  const [isDrawingFreehand, setIsDrawingFreehand] = useState(false);
+  const [isDrawingSpline, setIsDrawingSpline] = useState(false);
 
-  // 简化的坐标转换函数 - 只在CSS变换，不需要复杂的数学
+  // 简化的坐标转换函数
   const getCanvasCoordinates = useCallback((e) => {
     const canvas = canvasRef.current;
     const viewerContainer = containerRef.current;
@@ -53,9 +60,12 @@ export const useImageViewer = ({
     const viewerCenterX = viewerRect.width / 2;
     const viewerCenterY = viewerRect.height / 2;
     
-    // 计算canvas在viewer中的位置（绝对定位居中）
-    const canvasLeft = viewerCenterX - canvas.width / 2 * transform.scale;
-    const canvasTop = viewerCenterY - canvas.height / 2 * transform.scale;
+    // 计算canvas在viewer中的位置（绝对定位居中 + 平移）
+    const canvasCenterX = viewerCenterX + transform.translateX;
+    const canvasCenterY = viewerCenterY + transform.translateY;
+    
+    const canvasLeft = canvasCenterX - canvas.width / 2 * transform.scale;
+    const canvasTop = canvasCenterY - canvas.height / 2 * transform.scale;
     
     // 鼠标是否在canvas区域内
     if (
@@ -67,7 +77,7 @@ export const useImageViewer = ({
       return null;
     }
     
-    // 转换为canvas坐标（考虑缩放）
+    // 转换为canvas坐标（考虑缩放和平移）
     const canvasX = (mouseX - canvasLeft) / transform.scale;
     const canvasY = (mouseY - canvasTop) / transform.scale;
     
@@ -75,7 +85,7 @@ export const useImageViewer = ({
       x: canvasX,
       y: canvasY
     };
-  }, [transform.scale]);
+  }, [transform.scale, transform.translateX, transform.translateY]);
 
   // Helper functions
   const isPointInAnnotation = useCallback((point, annotation) => {
@@ -96,6 +106,30 @@ export const useImageViewer = ({
         const normalizedX = (point.x - coords.x) / coords.radiusX;
         const normalizedY = (point.y - coords.y) / coords.radiusY;
         return (normalizedX * normalizedX + normalizedY * normalizedY) <= 1;
+      case 'spline':
+        // 检查点是否在样条曲线附近
+        if (coords.points && coords.points.length > 0) {
+          for (let i = 0; i < coords.points.length; i++) {
+            const p = coords.points[i];
+            const distance = Math.sqrt(
+              Math.pow(point.x - p.x, 2) + Math.pow(point.y - p.y, 2)
+            );
+            if (distance < 10) return true;
+          }
+        }
+        return false;
+      case 'freehand':
+        // 检查点是否在自由手绘路径附近
+        if (coords.points && coords.points.length > 0) {
+          for (let i = 0; i < coords.points.length; i++) {
+            const p = coords.points[i];
+            const distance = Math.sqrt(
+              Math.pow(point.x - p.x, 2) + Math.pow(point.y - p.y, 2)
+            );
+            if (distance < 10) return true;
+          }
+        }
+        return false;
       default:
         return false;
     }
@@ -123,6 +157,10 @@ export const useImageViewer = ({
         return coordinates.radius > MIN_SIZE;
       case 'ellipse':
         return coordinates.radiusX > MIN_SIZE && coordinates.radiusY > MIN_SIZE;
+      case 'spline':
+        return coordinates.points && coordinates.points.length >= 3;
+      case 'freehand':
+        return coordinates.points && coordinates.points.length >= 2;
       default:
         return false;
     }
@@ -219,24 +257,45 @@ export const useImageViewer = ({
       if (annotation) {
         setSelectedAnnotation(annotation);
         setDragging(true);
-        const annCoords = annotation.coordinates;
-        setDragOffset({
-          x: x - annCoords.x,
-          y: y - annCoords.y
-        });
+        
+        // 计算拖拽偏移量（基于标注的坐标）
+        if (annotation.shape_type === 'rectangle' || annotation.shape_type === 'circle' || annotation.shape_type === 'ellipse') {
+          const annCoords = annotation.coordinates;
+          setDragOffset({
+            x: x - annCoords.x,
+            y: y - annCoords.y
+          });
+        } else if (annotation.shape_type === 'spline' || annotation.shape_type === 'freehand') {
+          // 对于路径类标注，计算相对于第一个点的偏移
+          const firstPoint = annotation.coordinates.points[0];
+          setDragOffset({
+            x: x - firstPoint.x,
+            y: y - firstPoint.y
+          });
+        }
       } else {
         setSelectedAnnotation(null);
       }
-    } else if (selectedTool && selectedTool !== 'select') {
+    } else if (selectedTool === 'spline') {
+      // 样条曲线：添加点
+      setIsDrawingSpline(true);
+      const newPoints = [...splinePoints, { x, y }];
+      setSplinePoints(newPoints);
+    } else if (selectedTool === 'freehand') {
+      // 自由手绘：开始绘制
+      setIsDrawingFreehand(true);
+      setFreehandPoints([{ x, y }]);
+    } else if (selectedTool && ['rectangle', 'circle', 'ellipse'].includes(selectedTool)) {
+      // 矩形、圆形、椭圆：开始绘制
       setDrawing(true);
       setStartPoint({ x, y });
       setCurrentPoint({ x, y });
     }
-  }, [isPanning, getCanvasCoordinates, selectedTool, getAnnotationAtPoint]);
+  }, [isPanning, getCanvasCoordinates, selectedTool, getAnnotationAtPoint, splinePoints]);
 
   const handleMouseMove = useCallback((e) => {
     if (isPanning && panStart.x !== 0 && panStart.y !== 0) {
-      // 修复：在整个窗口上平移
+      // 在整个窗口上平移
       const deltaX = e.clientX - panStart.x;
       const deltaY = e.clientY - panStart.y;
       
@@ -256,17 +315,42 @@ export const useImageViewer = ({
     const { x, y } = coords;
 
     if (dragging && selectedAnnotation) {
-      const newCoords = { ...selectedAnnotation.coordinates };
-      newCoords.x = x - dragOffset.x;
-      newCoords.y = y - dragOffset.y;
-      
-      if (onAnnotationUpdate) {
-        onAnnotationUpdate(selectedAnnotation.id, { coordinates: newCoords });
+      // 更新标注位置
+      if (selectedAnnotation.shape_type === 'rectangle' || selectedAnnotation.shape_type === 'circle' || selectedAnnotation.shape_type === 'ellipse') {
+        const newCoords = { ...selectedAnnotation.coordinates };
+        newCoords.x = x - dragOffset.x;
+        newCoords.y = y - dragOffset.y;
+        
+        if (onAnnotationUpdate) {
+          onAnnotationUpdate(selectedAnnotation.id, { coordinates: newCoords });
+        }
+      } else if (selectedAnnotation.shape_type === 'spline' || selectedAnnotation.shape_type === 'freehand') {
+        // 对于路径类标注，移动所有点
+        const offsetX = x - dragOffset.x - selectedAnnotation.coordinates.points[0].x;
+        const offsetY = y - dragOffset.y - selectedAnnotation.coordinates.points[0].y;
+        
+        const newPoints = selectedAnnotation.coordinates.points.map(point => ({
+          x: point.x + offsetX,
+          y: point.y + offsetY
+        }));
+        
+        const newCoords = {
+          ...selectedAnnotation.coordinates,
+          points: newPoints
+        };
+        
+        if (onAnnotationUpdate) {
+          onAnnotationUpdate(selectedAnnotation.id, { coordinates: newCoords });
+        }
       }
     } else if (drawing && startPoint) {
+      // 矩形、圆形、椭圆：更新当前点
       setCurrentPoint({ x, y });
+    } else if (isDrawingFreehand) {
+      // 自由手绘：添加点
+      setFreehandPoints(prev => [...prev, { x, y }]);
     }
-  }, [isPanning, panStart, dragging, selectedAnnotation, dragOffset, onAnnotationUpdate, drawing, startPoint, getCanvasCoordinates]);
+  }, [isPanning, panStart, dragging, selectedAnnotation, dragOffset, onAnnotationUpdate, drawing, startPoint, getCanvasCoordinates, isDrawingFreehand]);
 
   const handleMouseUp = useCallback((e) => {
     if (isPanning) {
@@ -279,14 +363,35 @@ export const useImageViewer = ({
     
     const { x, y } = coords;
 
-    if (drawing && startPoint && selectedTool && selectedTool !== 'select') {
+    if (selectedTool === 'freehand' && isDrawingFreehand && freehandPoints.length > 1) {
+      // 完成自由手绘
+      const simplifiedPoints = PathRenderer.simplifyPath(freehandPoints, 2.0);
+      
+      if (onAnnotationCreate && simplifiedPoints.length >= 2) {
+        onAnnotationCreate({
+          shape_type: 'freehand',
+          coordinates: { 
+            points: simplifiedPoints,
+            area: PathRenderer.calculatePathArea(simplifiedPoints),
+            length: PathRenderer.calculatePathLength(simplifiedPoints)
+          },
+          label: `Freehand ROI ${annotations.length + 1}`,
+          color: color,
+          line_width: lineWidth
+        });
+      }
+      
+      setIsDrawingFreehand(false);
+      setFreehandPoints([]);
+    } else if (drawing && startPoint && selectedTool && ['rectangle', 'circle', 'ellipse'].includes(selectedTool)) {
+      // 完成矩形、圆形、椭圆
       const coordinates = calculateCoordinates(selectedTool, startPoint.x, startPoint.y, x, y);
       
       if (coordinates && isAnnotationValid(selectedTool, coordinates) && onAnnotationCreate) {
         onAnnotationCreate({
           shape_type: selectedTool,
           coordinates: coordinates,
-          label: `Annotation ${annotations.length + 1}`,
+          label: `${selectedTool.charAt(0).toUpperCase() + selectedTool.slice(1)} ROI ${annotations.length + 1}`,
           color: color,
           line_width: lineWidth
         });
@@ -297,12 +402,70 @@ export const useImageViewer = ({
     setStartPoint(null);
     setCurrentPoint(null);
     setDragging(false);
-  }, [isPanning, drawing, startPoint, selectedTool, onAnnotationCreate, annotations.length, color, lineWidth, getCanvasCoordinates, calculateCoordinates, isAnnotationValid]);
+  }, [isPanning, selectedTool, isDrawingFreehand, freehandPoints, onAnnotationCreate, annotations.length, color, lineWidth, drawing, startPoint, getCanvasCoordinates, calculateCoordinates, isAnnotationValid]);
+
+  // 双击事件处理样条曲线完成
+  const handleDoubleClick = useCallback((e) => {
+    if (selectedTool === 'spline' && splinePoints.length >= 3) {
+      // 完成样条曲线
+      const closedPoints = [...splinePoints, splinePoints[0]]; // 闭合曲线
+      
+      if (onAnnotationCreate) {
+        onAnnotationCreate({
+          shape_type: 'spline',
+          coordinates: { 
+            points: splinePoints,
+            closed: true,
+            area: PathRenderer.calculatePathArea(closedPoints),
+            length: PathRenderer.calculatePathLength(splinePoints)
+          },
+          label: `Spline ROI ${annotations.length + 1}`,
+          color: color,
+          line_width: lineWidth
+        });
+      }
+      
+      setSplinePoints([]);
+      setIsDrawingSpline(false);
+    }
+  }, [selectedTool, splinePoints, onAnnotationCreate, annotations.length, color, lineWidth]);
+
+  // 处理鼠标离开事件
+  const handleMouseLeave = useCallback(() => {
+    if (dragging || drawing || isDrawingFreehand || isDrawingSpline) {
+      setDrawing(false);
+      setDragging(false);
+      setIsDrawingFreehand(false);
+      setIsDrawingSpline(false);
+      setStartPoint(null);
+      setCurrentPoint(null);
+      setSplinePoints([]);
+      setFreehandPoints([]);
+    }
+    if (isPanning) {
+      setPanStart({ x: 0, y: 0 });
+    }
+  }, [dragging, drawing, isDrawingFreehand, isDrawingSpline, isPanning]);
 
   // Effects
   useEffect(() => {
     if (selectedTool !== 'select' && selectedAnnotation) {
       setSelectedAnnotation(null);
+    }
+    
+    // 切换工具时清除绘制状态
+    if (selectedTool !== 'spline') {
+      setSplinePoints([]);
+      setIsDrawingSpline(false);
+    }
+    if (selectedTool !== 'freehand') {
+      setFreehandPoints([]);
+      setIsDrawingFreehand(false);
+    }
+    if (!['rectangle', 'circle', 'ellipse'].includes(selectedTool)) {
+      setDrawing(false);
+      setStartPoint(null);
+      setCurrentPoint(null);
     }
   }, [selectedTool, selectedAnnotation]);
 
@@ -358,18 +521,26 @@ export const useImageViewer = ({
         }
       }
       
+      // ESC键取消绘制或选择
       if (e.key === 'Escape') {
         if (isPanning) {
           handlePanEnd();
-        } else if (selectedAnnotation) {
-          setSelectedAnnotation(null);
+        } else if (isDrawingSpline) {
+          setSplinePoints([]);
+          setIsDrawingSpline(false);
+        } else if (isDrawingFreehand) {
+          setFreehandPoints([]);
+          setIsDrawingFreehand(false);
         } else if (drawing) {
           setDrawing(false);
           setStartPoint(null);
           setCurrentPoint(null);
+        } else if (selectedAnnotation) {
+          setSelectedAnnotation(null);
         }
       }
       
+      // 空格键启动/停止平移模式
       if (e.key === ' ') {
         e.preventDefault();
         if (isPanning) {
@@ -384,7 +555,7 @@ export const useImageViewer = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedAnnotation, isPanning, drawing, onAnnotationDelete, handleZoomIn, handleZoomOut, handleReset, handlePanEnd, handlePanStart]);
+  }, [selectedAnnotation, isPanning, drawing, isDrawingSpline, isDrawingFreehand, onAnnotationDelete, handleZoomIn, handleZoomOut, handleReset, handlePanEnd, handlePanStart]);
 
   // Update cursor
   useEffect(() => {
@@ -394,11 +565,15 @@ export const useImageViewer = ({
         viewerContainer.style.cursor = 'grabbing';
       } else if (selectedTool === 'select') {
         viewerContainer.style.cursor = dragging ? 'grabbing' : 'grab';
+      } else if (selectedTool === 'spline') {
+        viewerContainer.style.cursor = 'crosshair';
+      } else if (selectedTool === 'freehand') {
+        viewerContainer.style.cursor = isDrawingFreehand ? 'crosshair' : 'default';
       } else {
         viewerContainer.style.cursor = 'crosshair';
       }
     }
-  }, [isPanning, selectedTool, dragging]);
+  }, [isPanning, selectedTool, dragging, isDrawingFreehand]);
 
   return {
     // Refs
@@ -419,11 +594,17 @@ export const useImageViewer = ({
     isPanning,
     panStart,
     canvasSize,
+    splinePoints,
+    freehandPoints,
+    isDrawingFreehand,
+    isDrawingSpline,
     
     // Handlers
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    handleDoubleClick,
+    handleMouseLeave,
     handleWheel,
     handleZoomIn,
     handleZoomOut,
@@ -431,6 +612,11 @@ export const useImageViewer = ({
     handlePanStart,
     handlePanEnd,
     handleReset,
+    
+    // Helper functions
+    getAnnotationAtPoint,
+    calculateCoordinates,
+    isAnnotationValid,
     
     // Additional data
     annotations,

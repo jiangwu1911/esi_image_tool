@@ -10,6 +10,7 @@ const CanvasContainer = ({
   handleMouseDown,
   handleMouseMove,
   handleMouseUp,
+  handleDoubleClick,
   handleMouseLeave,
   selectedTool,
   dragging,
@@ -59,6 +60,7 @@ const CanvasContainer = ({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onDoubleClick={handleDoubleClick}
         onMouseLeave={handleMouseLeave}
         style={canvasStyle}
       />

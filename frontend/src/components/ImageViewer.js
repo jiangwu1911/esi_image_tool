@@ -36,11 +36,17 @@ const ImageViewer = ({
     transform,
     isPanning,
     canvasSize,
+    splinePoints,
+    freehandPoints,
+    isDrawingFreehand,
+    isDrawingSpline,
     
     // Handlers
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
+    handleDoubleClick,
+    handleMouseLeave,
     handleWheel,
     handleZoomIn,
     handleZoomOut,
@@ -75,30 +81,30 @@ const ImageViewer = ({
       color,
       drawing ? startPoint : null,
       drawing ? currentPoint : null,
-      selectedTool
+      selectedTool,
+      splinePoints,
+      freehandPoints
     );
-  };
-
-  // 处理鼠标离开事件
-  const handleMouseLeave = () => {
-    if (dragging || drawing) {
-      // 状态会在useImageViewer中重置
-    }
   };
 
   // 当标注变化时重绘
   useEffect(() => {
-    if (!drawing) {
+    if (!drawing && !isDrawingFreehand && !isDrawingSpline) {
       drawAll();
     }
-  }, [annotations, selectedAnnotation, imageLoaded, drawing]);
+  }, [annotations, selectedAnnotation, imageLoaded, drawing, isDrawingFreehand, isDrawingSpline]);
 
   // 当绘制状态变化时重绘
   useEffect(() => {
-    if (drawing && startPoint && currentPoint) {
+    if ((drawing && startPoint && currentPoint) || isDrawingFreehand || isDrawingSpline) {
       drawAll();
     }
-  }, [drawing, startPoint, currentPoint]);
+  }, [drawing, startPoint, currentPoint, isDrawingFreehand, isDrawingSpline, splinePoints, freehandPoints]);
+
+  // 当变换变化时重绘
+  useEffect(() => {
+    drawAll();
+  }, [transform]);
 
   return (
     <div 
@@ -109,6 +115,8 @@ const ImageViewer = ({
         cursor: isPanning ? 'grabbing' : (
           selectedTool === 'select' 
             ? (dragging ? 'grabbing' : 'grab') 
+            : selectedTool === 'spline' || selectedTool === 'freehand' 
+            ? 'crosshair' 
             : 'crosshair'
         )
       }}
@@ -134,6 +142,50 @@ const ImageViewer = ({
         language={language}
       />
       
+      {selectedTool === 'spline' && splinePoints.length > 0 && (
+        <div className="spline-info" style={{
+          position: 'absolute',
+          top: '60px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(35, 49, 67, 0.9)',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '20px',
+          fontSize: '14px',
+          border: '1px solid #2c3e50',
+          zIndex: 1001,
+          backdropFilter: 'blur(5px)'
+        }}>
+          {language === 'zh' 
+            ? `已添加 ${splinePoints.length} 个点 (双击完成，ESC取消)`
+            : `Added ${splinePoints.length} points (Double-click to finish, ESC to cancel)`
+          }
+        </div>
+      )}
+      
+      {selectedTool === 'freehand' && isDrawingFreehand && freehandPoints.length > 0 && (
+        <div className="freehand-info" style={{
+          position: 'absolute',
+          top: '60px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(35, 49, 67, 0.9)',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '20px',
+          fontSize: '14px',
+          border: '1px solid #2c3e50',
+          zIndex: 1001,
+          backdropFilter: 'blur(5px)'
+        }}>
+          {language === 'zh' 
+            ? `正在绘制自由手绘 (松开鼠标完成，ESC取消)`
+            : `Drawing freehand (Release mouse to finish, ESC to cancel)`
+          }
+        </div>
+      )}
+      
       <LoadingOverlay
         show={!imageLoaded && imageUrl}
         language={language}
@@ -148,6 +200,7 @@ const ImageViewer = ({
         handleMouseDown={handleMouseDown}
         handleMouseMove={handleMouseMove}
         handleMouseUp={handleMouseUp}
+        handleDoubleClick={handleDoubleClick}
         handleMouseLeave={handleMouseLeave}
         selectedTool={selectedTool}
         dragging={dragging}

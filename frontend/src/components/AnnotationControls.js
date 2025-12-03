@@ -18,6 +18,8 @@ const AnnotationControls = ({
         'tools.rectangle': 'Rectangle',
         'tools.circle': 'Circle',
         'tools.ellipse': 'Ellipse',
+        'tools.spline': 'Spline ROI',
+        'tools.freehand': 'Freehand ROI',
         'tools.select': 'Select/Move',
         'tools.lineWidth': 'Line Width',
         'tools.color': 'Color',
@@ -28,6 +30,8 @@ const AnnotationControls = ({
         'tools.instruction4': 'Press Delete key to delete selected annotation',
         'tools.instruction5': 'Press ESC key to cancel selection',
         'tools.instruction6': 'Annotations need at least 5 pixels to be created',
+        'tools.instructionSpline': 'For Spline ROI: Click to add points, double-click to complete',
+        'tools.instructionFreehand': 'For Freehand ROI: Click and drag to draw freely',
         'color.red': 'Red',
         'color.blue': 'Blue',
         'color.green': 'Green',
@@ -41,6 +45,8 @@ const AnnotationControls = ({
         'tools.rectangle': '矩形',
         'tools.circle': '圆形',
         'tools.ellipse': '椭圆',
+        'tools.spline': '样条曲线ROI',
+        'tools.freehand': '自由手绘ROI',
         'tools.select': '选择/移动',
         'tools.lineWidth': '线宽',
         'tools.color': '颜色',
@@ -51,6 +57,8 @@ const AnnotationControls = ({
         'tools.instruction4': '按Delete键删除选中的标注',
         'tools.instruction5': '按ESC键取消选择',
         'tools.instruction6': '标注需要至少5像素大小才能创建',
+        'tools.instructionSpline': '样条曲线：点击添加点，双击完成绘制',
+        'tools.instructionFreehand': '自由手绘：点击并拖动自由绘制',
         'color.red': '红色',
         'color.blue': '蓝色',
         'color.green': '绿色',
@@ -66,6 +74,8 @@ const AnnotationControls = ({
     { type: 'rectangle', label: t('tools.rectangle'), icon: '⬜' },
     { type: 'circle', label: t('tools.circle'), icon: '⭕' },
     { type: 'ellipse', label: t('tools.ellipse'), icon: '🔘' },
+    { type: 'spline', label: t('tools.spline'), icon: '〰️' },
+    { type: 'freehand', label: t('tools.freehand'), icon: '✏️' },
     { type: 'select', label: t('tools.select'), icon: '↔️' }
   ];
 
@@ -147,11 +157,14 @@ const AnnotationControls = ({
         <div className="instructions">
           <h4>{t('tools.instructions')}</h4>
           <ul>
-            <li>{t('tools.instruction1')}</li>
-            <li>{t('tools.instruction2')}</li>
-            <li>{t('tools.instruction3')}</li>
-            <li>{t('tools.instruction4')}</li>
-            <li>{t('tools.instruction5')}</li>
+              <li>{t('tools.instruction1')}</li>
+              <li>{t('tools.instruction2')}</li>
+              <li>{t('tools.instruction3')}</li>
+              <li>{t('tools.instruction4')}</li>
+              <li>{t('tools.instruction5')}</li>
+              <li>{t('tools.instruction6')}</li>
+              <li>{t('tools.instructionSpline')}</li>
+              <li>{t('tools.instructionFreehand')}</li>
           </ul>
         </div>
       </div>

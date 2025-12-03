@@ -1,7 +1,10 @@
 // CanvasRenderer.js
+import { PathRenderer } from './PathRenderer';
+
 export const CanvasRenderer = {
   drawAll: (ctx, canvas, imageObj, annotations, selectedAnnotation, 
-            lineWidth, color, startPoint = null, currentPoint = null, selectedTool = null) => {
+            lineWidth, color, startPoint = null, currentPoint = null, selectedTool = null,
+            splinePoints = null, freehandPoints = null) => {
     
     if (!ctx || !canvas || !imageObj) return;
     
@@ -17,8 +20,8 @@ export const CanvasRenderer = {
     });
     
     // 如果正在绘制，绘制预览
-    if (startPoint && currentPoint && selectedTool && selectedTool !== 'select') {
-      CanvasRenderer.drawPreview(ctx, selectedTool, startPoint, currentPoint, lineWidth, color);
+    if (selectedTool && selectedTool !== 'select') {
+      CanvasRenderer.drawPreview(ctx, selectedTool, startPoint, currentPoint, lineWidth, color, splinePoints, freehandPoints);
     }
   },
   
@@ -30,20 +33,48 @@ export const CanvasRenderer = {
     ctx.strokeStyle = isSelected ? '#00ff00' : annColor;
     ctx.lineWidth = isSelected ? annLineWidth + 2 : annLineWidth;
     ctx.setLineDash(isSelected ? [5, 5] : []);
+    ctx.fillStyle = isSelected ? 'rgba(0, 255, 0, 0.1)' : `${annColor}20`;
     
     switch (annotation.shape_type) {
       case 'rectangle':
         ctx.strokeRect(coords.x, coords.y, coords.width, coords.height);
+        if (isSelected) {
+          ctx.fillRect(coords.x, coords.y, coords.width, coords.height);
+        }
         break;
       case 'circle':
         ctx.beginPath();
         ctx.arc(coords.x, coords.y, coords.radius, 0, 2 * Math.PI);
         ctx.stroke();
+        if (isSelected) {
+          ctx.fill();
+        }
         break;
       case 'ellipse':
         ctx.beginPath();
         ctx.ellipse(coords.x, coords.y, coords.radiusX, coords.radiusY, 0, 0, 2 * Math.PI);
         ctx.stroke();
+        if (isSelected) {
+          ctx.fill();
+        }
+        break;
+      case 'spline':
+        if (coords.points && coords.points.length > 1) {
+          PathRenderer.drawSpline(ctx, coords.points, coords.closed || false);
+          ctx.stroke();
+          if (isSelected && coords.closed) {
+            ctx.fill();
+          }
+        }
+        break;
+      case 'freehand':
+        if (coords.points && coords.points.length > 1) {
+          PathRenderer.drawFreehand(ctx, coords.points);
+          ctx.stroke();
+          if (isSelected) {
+            ctx.fill();
+          }
+        }
         break;
       default:
         break;
@@ -59,56 +90,101 @@ export const CanvasRenderer = {
     ctx.setLineDash([]);
   },
   
-  drawPreview: (ctx, shapeType, startPoint, currentPoint, lineWidth, color) => {
-    const coords = calculatePreviewCoordinates(shapeType, startPoint, currentPoint);
-    
-    if (!coords) return;
-    
+  drawPreview: (ctx, shapeType, startPoint, currentPoint, lineWidth, color, splinePoints, freehandPoints) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
-    ctx.setLineDash([5, 5]);
+    ctx.fillStyle = `${color}20`;
     
     switch (shapeType) {
       case 'rectangle':
-        ctx.strokeRect(coords.x, coords.y, coords.width, coords.height);
+        if (startPoint && currentPoint) {
+          const coords = calculateRectangleCoordinates(startPoint, currentPoint);
+          ctx.setLineDash([5, 5]);
+          ctx.strokeRect(coords.x, coords.y, coords.width, coords.height);
+          ctx.setLineDash([]);
+        }
         break;
       case 'circle':
-        ctx.beginPath();
-        ctx.arc(coords.x, coords.y, coords.radius, 0, 2 * Math.PI);
-        ctx.stroke();
+        if (startPoint && currentPoint) {
+          const coords = calculateCircleCoordinates(startPoint, currentPoint);
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.arc(coords.x, coords.y, coords.radius, 0, 2 * Math.PI);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
         break;
       case 'ellipse':
-        ctx.beginPath();
-        ctx.ellipse(coords.x, coords.y, coords.radiusX, coords.radiusY, 0, 0, 2 * Math.PI);
-        ctx.stroke();
+        if (startPoint && currentPoint) {
+          const coords = calculateEllipseCoordinates(startPoint, currentPoint);
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.ellipse(coords.x, coords.y, coords.radiusX, coords.radiusY, 0, 0, 2 * Math.PI);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        break;
+      case 'spline':
+        if (splinePoints && splinePoints.length > 0) {
+          ctx.setLineDash([5, 5]);
+          // 绘制点
+          splinePoints.forEach((point, index) => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+            
+            // 绘制连接线
+            if (index > 0) {
+              ctx.beginPath();
+              ctx.moveTo(splinePoints[index - 1].x, splinePoints[index - 1].y);
+              ctx.lineTo(point.x, point.y);
+              ctx.strokeStyle = `${color}80`;
+              ctx.stroke();
+            }
+          });
+          
+          // 绘制样条曲线
+          if (splinePoints.length > 1) {
+            PathRenderer.drawSpline(ctx, splinePoints, false);
+            ctx.strokeStyle = color;
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        }
+        break;
+      case 'freehand':
+        if (freehandPoints && freehandPoints.length > 1) {
+          ctx.setLineDash([5, 5]);
+          PathRenderer.drawFreehand(ctx, freehandPoints);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
         break;
     }
-    
-    ctx.setLineDash([]);
   }
 };
 
-// Helper function for preview coordinates
-function calculatePreviewCoordinates(shapeType, startPoint, currentPoint) {
-  const { x: startX, y: startY } = startPoint;
-  const { x: endX, y: endY } = currentPoint;
-  
-  switch (shapeType) {
-    case 'rectangle':
-      return {
-        x: Math.min(startX, endX),
-        y: Math.min(startY, endY),
-        width: Math.abs(endX - startX),
-        height: Math.abs(endY - startY)
-      };
-    case 'circle':
-      const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-      return { x: startX, y: startY, radius: radius };
-    case 'ellipse':
-      const radiusX = Math.abs(endX - startX);
-      const radiusY = Math.abs(endY - startY);
-      return { x: startX, y: startY, radiusX: radiusX, radiusY: radiusY };
-    default:
-      return null;
-  }
+// 辅助函数
+function calculateRectangleCoordinates(startPoint, currentPoint) {
+  return {
+    x: Math.min(startPoint.x, currentPoint.x),
+    y: Math.min(startPoint.y, currentPoint.y),
+    width: Math.abs(currentPoint.x - startPoint.x),
+    height: Math.abs(currentPoint.y - startPoint.y)
+  };
+}
+
+function calculateCircleCoordinates(startPoint, currentPoint) {
+  const radius = Math.sqrt(
+    Math.pow(currentPoint.x - startPoint.x, 2) + 
+    Math.pow(currentPoint.y - startPoint.y, 2)
+  );
+  return { x: startPoint.x, y: startPoint.y, radius: radius };
+}
+
+function calculateEllipseCoordinates(startPoint, currentPoint) {
+  const radiusX = Math.abs(currentPoint.x - startPoint.x);
+  const radiusY = Math.abs(currentPoint.y - startPoint.y);
+  return { x: startPoint.x, y: startPoint.y, radiusX: radiusX, radiusY: radiusY };
 }

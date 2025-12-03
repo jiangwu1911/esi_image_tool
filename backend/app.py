@@ -382,6 +382,50 @@ def upload_dicom():
         logger.error(traceback.format_exc())
         return jsonify({'error': f'Failed to process DICOM file: {str(e)}'}), 500
 
+def validate_annotation_data(data):
+    """验证标注数据"""
+    shape_type = data.get('shape_type')
+    coordinates = data.get('coordinates')
+    
+    if not shape_type or not coordinates:
+        return False, "Missing shape_type or coordinates"
+    
+    valid_shapes = ['rectangle', 'circle', 'ellipse', 'spline', 'freehand']
+    if shape_type not in valid_shapes:
+        return False, f"Invalid shape_type. Must be one of: {valid_shapes}"
+    
+    # 验证不同形状的坐标格式
+    if shape_type == 'rectangle':
+        required_keys = ['x', 'y', 'width', 'height']
+        if not all(key in coordinates for key in required_keys):
+            return False, "Rectangle requires x, y, width, height"
+    
+    elif shape_type == 'circle':
+        required_keys = ['x', 'y', 'radius']
+        if not all(key in coordinates for key in required_keys):
+            return False, "Circle requires x, y, radius"
+    
+    elif shape_type == 'ellipse':
+        required_keys = ['x', 'y', 'radiusX', 'radiusY']
+        if not all(key in coordinates for key in required_keys):
+            return False, "Ellipse requires x, y, radiusX, radiusY"
+    
+    elif shape_type == 'spline':
+        # 样条曲线：点数组
+        if not isinstance(coordinates, dict) or 'points' not in coordinates:
+            return False, "Spline requires points array"
+        if not isinstance(coordinates['points'], list) or len(coordinates['points']) < 3:
+            return False, "Spline requires at least 3 points"
+    
+    elif shape_type == 'freehand':
+        # 自由手绘：点数组
+        if not isinstance(coordinates, dict) or 'points' not in coordinates:
+            return False, "Freehand requires points array"
+        if not isinstance(coordinates['points'], list) or len(coordinates['points']) < 2:
+            return False, "Freehand requires at least 2 points"
+    
+    return True, "Valid"
+
 @app.route('/api/studies', methods=['GET'])
 def get_studies():
     try:
@@ -430,35 +474,50 @@ def get_instances(series_id):
     except Exception as e:
         return jsonify({'error': 'Failed to get instances'}), 500
 
-@app.route('/api/annotations/<int:instance_id>', methods=['GET', 'POST'])
-def handle_annotations(instance_id):
+@app.route('/api/annotations/<int:instance_id>', methods=['POST'])
+def create_annotation(instance_id):
+    """创建标注"""
     try:
-        if request.method == 'GET':
-            annotations = Annotation.query.filter_by(instance_id=instance_id).all()
-            result = []
-            for ann in annotations:
-                result.append({
-                    'id': ann.id,
-                    'shape_type': ann.shape_type,
-                    'coordinates': ann.coordinates,
-                    'label': ann.label
-                })
-            return jsonify(result)
+        data = request.json
         
-        elif request.method == 'POST':
-            data = request.json
-            annotation = Annotation(
-                shape_type=data['shape_type'],
-                coordinates=data['coordinates'],
-                label=data.get('label', ''),
-                instance_id=instance_id
-            )
-            db.session.add(annotation)
-            db.session.commit()
-            return jsonify({'message': 'Annotation created', 'id': annotation.id})
-            
+        # 验证数据
+        is_valid, message = validate_annotation_data(data)
+        if not is_valid:
+            return jsonify({'error': message}), 400
+        
+        # 检查实例是否存在
+        instance = Instance.query.get(instance_id)
+        if not instance:
+            return jsonify({'error': 'Instance not found'}), 404
+        
+        annotation = Annotation(
+            shape_type=data['shape_type'],
+            coordinates=data['coordinates'],
+            label=data.get('label', f'{data["shape_type"].capitalize()} ROI'),
+            color=data.get('color', 'red'),
+            line_width=data.get('line_width', 2),
+            instance_id=instance_id
+        )
+        db.session.add(annotation)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Annotation created',
+            'id': annotation.id,
+            'annotation': {
+                'id': annotation.id,
+                'shape_type': annotation.shape_type,
+                'coordinates': annotation.coordinates,
+                'label': annotation.label,
+                'color': annotation.color,
+                'line_width': annotation.line_width
+            }
+        })
+        
     except Exception as e:
-        return jsonify({'error': 'Failed to handle annotations'}), 500
+        db.session.rollback()
+        logger.error(f"Error creating annotation: {e}")
+        return jsonify({'error': f'Failed to create annotation: {str(e)}'}), 500
 
 @app.route('/api/annotations/<int:annotation_id>', methods=['DELETE'])
 def delete_annotation(annotation_id):
