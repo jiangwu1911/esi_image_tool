@@ -35,52 +35,47 @@ export const useImageViewer = ({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
 
-  // 修复：正确的坐标转换函数
+  // 简化的坐标转换函数 - 只在CSS变换，不需要复杂的数学
   const getCanvasCoordinates = useCallback((e) => {
     const canvas = canvasRef.current;
-    const container = canvasContainerRef.current;
+    const viewerContainer = containerRef.current;
     
-    if (!canvas || !container) return null;
+    if (!canvas || !viewerContainer) return null;
     
-    // 获取鼠标相对于容器的坐标
-    const rect = container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // 获取整个image-viewer容器的边界
+    const viewerRect = viewerContainer.getBoundingClientRect();
     
-    // 重要：计算容器中心
-    const containerCenterX = rect.width / 2;
-    const containerCenterY = rect.height / 2;
+    // 鼠标相对于viewer容器的坐标
+    const mouseX = e.clientX - viewerRect.left;
+    const mouseY = e.clientY - viewerRect.top;
     
-    // 鼠标相对于容器中心的坐标
-    const centeredX = x - containerCenterX;
-    const centeredY = y - containerCenterY;
+    // viewer中心点
+    const viewerCenterX = viewerRect.width / 2;
+    const viewerCenterY = viewerRect.height / 2;
     
-    // 应用反向变换：先反向平移，再反向旋转，再反向缩放
-    // 1. 反向平移
-    let transformedX = centeredX - transform.translateX;
-    let transformedY = centeredY - transform.translateY;
+    // 计算canvas在viewer中的位置（绝对定位居中）
+    const canvasLeft = viewerCenterX - canvas.width / 2 * transform.scale;
+    const canvasTop = viewerCenterY - canvas.height / 2 * transform.scale;
     
-    // 2. 反向旋转
-    const rad = -transform.rotation * Math.PI / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
+    // 鼠标是否在canvas区域内
+    if (
+      mouseX < canvasLeft || 
+      mouseX > canvasLeft + canvas.width * transform.scale ||
+      mouseY < canvasTop || 
+      mouseY > canvasTop + canvas.height * transform.scale
+    ) {
+      return null;
+    }
     
-    const rotatedX = cos * transformedX - sin * transformedY;
-    const rotatedY = sin * transformedX + cos * transformedY;
-    
-    // 3. 反向缩放
-    transformedX = rotatedX / transform.scale;
-    transformedY = rotatedY / transform.scale;
-    
-    // 4. 转换为画布坐标（加上画布中心）
-    const canvasCenterX = canvas.width / 2;
-    const canvasCenterY = canvas.height / 2;
+    // 转换为canvas坐标（考虑缩放）
+    const canvasX = (mouseX - canvasLeft) / transform.scale;
+    const canvasY = (mouseY - canvasTop) / transform.scale;
     
     return {
-      x: transformedX + canvasCenterX,
-      y: transformedY + canvasCenterY
+      x: canvasX,
+      y: canvasY
     };
-  }, [transform]);
+  }, [transform.scale]);
 
   // Helper functions
   const isPointInAnnotation = useCallback((point, annotation) => {
@@ -169,7 +164,6 @@ export const useImageViewer = ({
     }));
   }, []);
 
-  // 修复：确保每次只旋转90度
   const handleRotate = useCallback(() => {
     setTransform(prev => ({
       ...prev,
@@ -242,6 +236,7 @@ export const useImageViewer = ({
 
   const handleMouseMove = useCallback((e) => {
     if (isPanning && panStart.x !== 0 && panStart.y !== 0) {
+      // 修复：在整个窗口上平移
       const deltaX = e.clientX - panStart.x;
       const deltaY = e.clientY - panStart.y;
       
@@ -393,14 +388,14 @@ export const useImageViewer = ({
 
   // Update cursor
   useEffect(() => {
-    const container = containerRef.current;
-    if (container) {
+    const viewerContainer = containerRef.current;
+    if (viewerContainer) {
       if (isPanning) {
-        container.style.cursor = 'grabbing';
+        viewerContainer.style.cursor = 'grabbing';
       } else if (selectedTool === 'select') {
-        container.style.cursor = dragging ? 'grabbing' : 'grab';
+        viewerContainer.style.cursor = dragging ? 'grabbing' : 'grab';
       } else {
-        container.style.cursor = 'crosshair';
+        viewerContainer.style.cursor = 'crosshair';
       }
     }
   }, [isPanning, selectedTool, dragging]);
@@ -436,11 +431,6 @@ export const useImageViewer = ({
     handlePanStart,
     handlePanEnd,
     handleReset,
-    
-    // Helper functions for drawAll
-    getAnnotationAtPoint,
-    calculateCoordinates,
-    isAnnotationValid,
     
     // Additional data
     annotations,

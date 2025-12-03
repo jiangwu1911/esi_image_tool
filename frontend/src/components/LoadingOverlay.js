@@ -8,7 +8,9 @@ const LoadingOverlay = ({ show, language = 'en' }) => {
 
   return (
     <div className="loading-overlay">
-      {text}
+      <span style={{ color: 'white', fontSize: '16px' }}>
+        {text}
+      </span>
     </div>
   );
 };

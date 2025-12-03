@@ -19,14 +19,14 @@ const TransformInfo = ({ transform, isPanning, language = 'en' }) => {
 
   return (
     <div className="transform-info">
-      <span className="transform-text">
+      <span style={{ color: 'white', fontSize: '14px', fontWeight: '500', whiteSpace: 'nowrap' }}>
         {t('zoom')}{transform.scale.toFixed(2)}x
       </span>
-      <span className="transform-text">
+      <span style={{ color: 'white', fontSize: '14px', fontWeight: '500', whiteSpace: 'nowrap' }}>
         {t('rotation')}{transform.rotation}°
       </span>
       {isPanning && (
-        <span className="transform-text panning-active">
+        <span style={{ color: '#ff6b6b', fontSize: '14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
           {t('panning')}
         </span>
       )}

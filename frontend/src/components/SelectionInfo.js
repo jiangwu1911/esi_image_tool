@@ -19,7 +19,9 @@ const SelectionInfo = ({ selectedAnnotation, language = 'en' }) => {
 
   return (
     <div className="selection-info">
-      {t('selected')}{selectedAnnotation.label}{t('instructions')}
+      <span style={{ color: 'white', fontSize: '14px' }}>
+        {t('selected')}{selectedAnnotation.label}{t('instructions')}
+      </span>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+// Toolbar.js
 import React from 'react';
 import './Toolbar.css';
 
@@ -30,7 +31,7 @@ function Toolbar({ onZoomIn, onZoomOut, onRotate, onPan, onReset, language, isPa
         onClick={onZoomIn}
         title={t('zoomIn')}
       >
-        <span className="toolbar-icon">+</span>
+        <span className="toolbar-icon" style={{ color: 'white' }}>+</span>
       </button>
       
       <button 
@@ -38,7 +39,7 @@ function Toolbar({ onZoomIn, onZoomOut, onRotate, onPan, onReset, language, isPa
         onClick={onZoomOut}
         title={t('zoomOut')}
       >
-        <span className="toolbar-icon">-</span>
+        <span className="toolbar-icon" style={{ color: 'white' }}>-</span>
       </button>
       
       <button 
@@ -46,7 +47,7 @@ function Toolbar({ onZoomIn, onZoomOut, onRotate, onPan, onReset, language, isPa
         onClick={onRotate}
         title={t('rotate')}
       >
-        <span className="toolbar-icon">↻</span>
+        <span className="toolbar-icon" style={{ color: 'white' }}>↻</span>
       </button>
       
       <button 
@@ -54,7 +55,7 @@ function Toolbar({ onZoomIn, onZoomOut, onRotate, onPan, onReset, language, isPa
         onClick={onPan}
         title={t('pan')}
       >
-        <span className="toolbar-icon">⇲</span>
+        <span className="toolbar-icon" style={{ color: 'white' }}>⇲</span>
       </button>
       
       <div className="toolbar-separator"></div>
@@ -64,7 +65,7 @@ function Toolbar({ onZoomIn, onZoomOut, onRotate, onPan, onReset, language, isPa
         onClick={onReset}
         title={t('reset')}
       >
-        <span className="toolbar-icon">⟲</span>
+        <span className="toolbar-icon" style={{ color: 'white' }}>⟲</span>
       </button>
     </div>
   );

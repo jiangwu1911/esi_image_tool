@@ -71,23 +71,12 @@ const ImageViewer = ({
       imageObj, 
       annotations, 
       selectedAnnotation,
-      transform,
-      selectedTool,
       lineWidth,
       color,
       drawing ? startPoint : null,
-      drawing ? currentPoint : null
+      drawing ? currentPoint : null,
+      selectedTool
     );
-  };
-
-  // 更新画布容器样式
-  const updateCanvasContainerStyle = () => {
-    const container = canvasContainerRef.current;
-    if (!container) return;
-    
-    container.style.transform = `scale(${transform.scale})`;
-    container.style.transformOrigin = 'center center';
-    container.style.transition = 'transform 0.1s ease-out';
   };
 
   // 处理鼠标离开事件
@@ -111,17 +100,18 @@ const ImageViewer = ({
     }
   }, [drawing, startPoint, currentPoint]);
 
-  // 当变换变化时重绘
-  useEffect(() => {
-    drawAll();
-    updateCanvasContainerStyle();
-  }, [transform]);
-
   return (
     <div 
       ref={containerRef}
       className="image-viewer"
       onWheel={handleWheel}
+      style={{
+        cursor: isPanning ? 'grabbing' : (
+          selectedTool === 'select' 
+            ? (dragging ? 'grabbing' : 'grab') 
+            : 'crosshair'
+        )
+      }}
     >
       <Toolbar
         onZoomIn={handleZoomIn}

@@ -1,28 +1,12 @@
 // CanvasRenderer.js
 export const CanvasRenderer = {
   drawAll: (ctx, canvas, imageObj, annotations, selectedAnnotation, 
-            transform, selectedTool, lineWidth, color, startPoint = null, currentPoint = null) => {
+            lineWidth, color, startPoint = null, currentPoint = null, selectedTool = null) => {
     
     if (!ctx || !canvas || !imageObj) return;
     
     // 清除画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // 保存当前画布状态
-    ctx.save();
-    
-    // 重要：应用变换的正确顺序
-    // 1. 将原点移到画布中心
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    
-    // 2. 应用旋转
-    ctx.rotate(transform.rotation * Math.PI / 180);
-    
-    // 3. 应用平移
-    ctx.translate(transform.translateX / transform.scale, transform.translateY / transform.scale);
-    
-    // 4. 将原点移回
-    ctx.translate(-canvas.width / 2, -canvas.height / 2);
     
     // 绘制图像
     ctx.drawImage(imageObj, 0, 0, canvas.width, canvas.height);
@@ -36,9 +20,6 @@ export const CanvasRenderer = {
     if (startPoint && currentPoint && selectedTool && selectedTool !== 'select') {
       CanvasRenderer.drawPreview(ctx, selectedTool, startPoint, currentPoint, lineWidth, color);
     }
-    
-    // 恢复画布状态
-    ctx.restore();
   },
   
   drawAnnotation: (ctx, annotation, isSelected, defaultLineWidth, defaultColor) => {
