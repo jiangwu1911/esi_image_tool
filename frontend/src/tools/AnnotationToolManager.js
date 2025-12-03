@@ -1,9 +1,9 @@
-// AnnotationToolManager.js - 修复版本
+// AnnotationToolManager.js - 完整版本
 import { RectangleTool } from './RectangleTool';
 import { CircleTool } from './CircleTool';
 import { EllipseTool } from './EllipseTool';
-import { SplineTool } from './SplineTool';
-import { FreehandTool } from './FreehandTool';
+import { SimpleSplineTool } from './SimpleSplineTool';
+import { SimpleFreehandTool } from './SimpleFreehandTool';
 
 export class AnnotationToolManager {
   constructor() {
@@ -11,8 +11,8 @@ export class AnnotationToolManager {
       rectangle: new RectangleTool(),
       circle: new CircleTool(),
       ellipse: new EllipseTool(),
-      spline: new SplineTool(),
-      freehand: new FreehandTool()
+      spline: new SimpleSplineTool(),
+      freehand: new SimpleFreehandTool()
     };
     
     this.currentTool = null;
@@ -21,14 +21,24 @@ export class AnnotationToolManager {
       lineWidth: 2,
       label: ''
     };
+    this.pendingAnnotation = null;
   }
   
   // 设置当前工具
   setCurrentTool(toolType) {
+    console.log(`Setting current tool to: ${toolType}`);
     if (this.tools[toolType]) {
+      // 重置之前的工具
+      if (this.currentTool) {
+        this.currentTool.reset();
+      }
+      
       this.currentTool = this.tools[toolType];
+      this.pendingAnnotation = null;
+      console.log(`Tool ${toolType} set successfully`);
       return true;
     }
+    console.log(`Tool ${toolType} not found`);
     return false;
   }
   
@@ -37,38 +47,124 @@ export class AnnotationToolManager {
     return this.currentTool;
   }
   
+  // 获取当前工具类型
+  getCurrentToolType() {
+    return this.currentTool ? this.currentTool.type : null;
+  }
+  
   // 设置上下文（颜色、线宽等）
   setContext(context) {
     this.context = { ...this.context, ...context };
   }
   
-  // 处理鼠标事件 - 修复：返回更详细的结果
+  // 处理鼠标按下事件
   handleMouseDown(point) {
-    if (!this.currentTool) return { shouldDraw: false, action: 'none' };
+    console.log('ToolManager handleMouseDown', point);
+    if (!this.currentTool) {
+      console.log('No current tool');
+      return { shouldDraw: false, action: 'none', annotationData: null };
+    }
     
     const result = this.currentTool.onMouseDown(point, this.context);
+    console.log('Tool mouse down result:', result);
+    
+    // 如果有标注数据，保存起来
+    if (result.annotationData) {
+      this.pendingAnnotation = result.annotationData;
+      console.log('Pending annotation saved from mouse down:', this.pendingAnnotation);
+    }
+    
     return { ...result, action: 'mouseDown' };
   }
   
+  // 处理鼠标移动事件
   handleMouseMove(point) {
-    if (!this.currentTool) return { shouldDraw: false, action: 'none' };
+    if (!this.currentTool) {
+      return { shouldDraw: false, action: 'none', annotationData: null };
+    }
     
     const result = this.currentTool.onMouseMove(point, this.context);
     return { ...result, action: 'mouseMove' };
   }
   
+  // 处理鼠标释放事件
   handleMouseUp(point) {
-    if (!this.currentTool) return { shouldDraw: false, action: 'none' };
+    console.log('ToolManager handleMouseUp', point);
+    if (!this.currentTool) {
+      return { shouldDraw: false, action: 'none', annotationData: null };
+    }
     
     const result = this.currentTool.onMouseUp(point, this.context);
-    return { ...result, action: 'mouseUp' };
+    console.log('Tool mouse up result:', result);
+    
+    // 如果有标注数据，保存起来
+    if (result.shouldCreateAnnotation && result.annotationData) {
+      this.pendingAnnotation = result.annotationData;
+      console.log('Pending annotation saved from mouse up:', this.pendingAnnotation);
+    } else if (result.shouldCreateAnnotation && !result.annotationData) {
+      // 有些工具在onMouseUp时没有返回annotationData，需要调用getAnnotationData
+      const annotationData = this.currentTool.getAnnotationData(
+        this.context.label || `${this.currentTool.type} ROI`,
+        this.context.color,
+        this.context.lineWidth
+      );
+      
+      if (annotationData) {
+        this.pendingAnnotation = annotationData;
+        console.log('Annotation data generated on mouse up:', this.pendingAnnotation);
+      }
+    }
+    
+    // 如果需要重置工具，但保留标注数据
+    if (result.resetTool) {
+      setTimeout(() => {
+        if (this.currentTool) {
+          this.currentTool.reset();
+        }
+      }, 0);
+    }
+    
+    return { 
+      ...result, 
+      action: 'mouseUp',
+      annotationData: this.pendingAnnotation 
+    };
   }
   
+  // 处理双击事件
   handleDoubleClick(point) {
-    if (!this.currentTool) return { shouldDraw: false, action: 'none' };
+    console.log('ToolManager handleDoubleClick', point);
+    if (!this.currentTool) {
+      return { shouldDraw: false, action: 'none', annotationData: null };
+    }
     
     const result = this.currentTool.onDoubleClick(point, this.context);
+    console.log('Tool double click result:', result);
+    
+    // 如果有标注数据，保存起来
+    if (result.annotationData) {
+      this.pendingAnnotation = result.annotationData;
+    }
+    
     return { ...result, action: 'doubleClick' };
+  }
+  
+  // 获取并清除待处理的标注
+  getAndClearPendingAnnotation() {
+    const annotation = this.pendingAnnotation;
+    this.pendingAnnotation = null;
+    
+    // 重置当前工具
+    if (this.currentTool) {
+      this.currentTool.reset();
+    }
+    
+    return annotation;
+  }
+  
+  // 检查是否有待处理的标注
+  hasPendingAnnotation() {
+    return this.pendingAnnotation !== null;
   }
   
   // 绘制当前工具的预览
@@ -78,7 +174,7 @@ export class AnnotationToolManager {
     this.currentTool.drawPreview(ctx, this.context.color, this.context.lineWidth);
   }
   
-  // 绘制保存的标注 - 简化版本
+  // 绘制保存的标注
   drawAnnotation(ctx, annotation, isSelected = false) {
     if (!annotation || !annotation.coordinates) return;
     
@@ -190,7 +286,7 @@ export class AnnotationToolManager {
     ctx.setLineDash([]);
   }
   
-  // 绘制样条曲线标注
+  // 绘制样条曲线标注 - 简化版本
   drawSplineAnnotation(ctx, points, isClosed, color, lineWidth) {
     if (!points || points.length < 2) return;
     
@@ -206,44 +302,12 @@ export class AnnotationToolManager {
           ctx.lineTo(p1.x, p1.y);
         }
       } else {
-        // 绘制Catmull-Rom样条曲线
+        // 简化绘制：直接连接所有点
         const effectivePoints = isClosed ? [...points, points[0]] : points;
         
-        for (let i = 0; i < effectivePoints.length - 1; i++) {
-          const p0 = i > 0 ? effectivePoints[i - 1] : effectivePoints[i];
-          const p1 = effectivePoints[i];
-          const p2 = effectivePoints[i + 1];
-          const p3 = i < effectivePoints.length - 2 ? effectivePoints[i + 2] : effectivePoints[i + 1];
-          
-          // 检查所有点是否有效
-          if (!p0 || !p1 || !p2 || !p3 || 
-              p0.x === undefined || p0.y === undefined ||
-              p1.x === undefined || p1.y === undefined ||
-              p2.x === undefined || p2.y === undefined ||
-              p3.x === undefined || p3.y === undefined) {
-            continue;
-          }
-          
-          for (let t = 0; t <= 1; t += 0.05) {
-            const t2 = t * t;
-            const t3 = t2 * t;
-            
-            const x = 0.5 * ((2 * p1.x) +
-                           (-p0.x + p2.x) * t +
-                           (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-                           (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
-            
-            const y = 0.5 * ((2 * p1.y) +
-                           (-p0.y + p2.y) * t +
-                           (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-                           (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
-            
-            if (t === 0 && i === 0) {
-              ctx.moveTo(x, y);
-            } else {
-              ctx.lineTo(x, y);
-            }
-          }
+        ctx.moveTo(effectivePoints[0].x, effectivePoints[0].y);
+        for (let i = 1; i < effectivePoints.length; i++) {
+          ctx.lineTo(effectivePoints[i].x, effectivePoints[i].y);
         }
       }
       
@@ -256,11 +320,7 @@ export class AnnotationToolManager {
   // 重置所有工具
   resetAllTools() {
     Object.values(this.tools).forEach(tool => tool.reset());
-  }
-  
-  // 获取当前工具类型
-  getCurrentToolType() {
-    return this.currentTool ? this.currentTool.type : null;
+    this.pendingAnnotation = null;
   }
   
   // 检查是否有正在进行的绘制

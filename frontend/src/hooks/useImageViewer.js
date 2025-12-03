@@ -1,4 +1,4 @@
-// useImageViewer.js - 修复事件处理
+// useImageViewer.js - 修复版本，确保绘制预览实时显示
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AnnotationToolManager } from '../tools/AnnotationToolManager';
 
@@ -32,10 +32,18 @@ export const useImageViewer = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [shouldDraw, setShouldDraw] = useState(false);
+  
+  // 新增：强制重绘的触发器
+  const [forceRender, setForceRender] = useState(0);
   
   // Tool manager
   const toolManagerRef = useRef(new AnnotationToolManager());
+  
+  // 工具状态跟踪
+  const toolStateRef = useRef({
+    isDrawing: false,
+    lastUpdate: Date.now()
+  });
 
   // 更新工具上下文
   useEffect(() => {
@@ -51,8 +59,13 @@ export const useImageViewer = ({
     if (selectedTool && selectedTool !== 'select') {
       const success = toolManagerRef.current.setCurrentTool(selectedTool);
       console.log(`Setting tool ${selectedTool}: ${success ? 'success' : 'failed'}`);
+      
+      // 重置工具状态
+      toolStateRef.current.isDrawing = false;
+      setForceRender(prev => prev + 1);
     } else {
       toolManagerRef.current.currentTool = null;
+      toolStateRef.current.isDrawing = false;
     }
   }, [selectedTool]);
 
@@ -88,7 +101,7 @@ export const useImageViewer = ({
     const canvasX = (mouseX - canvasLeft) / transform.scale;
     const canvasY = (mouseY - canvasTop) / transform.scale;
     
-    return { x: canvasX, y: canvasY };
+    return { x: Math.round(canvasX), y: Math.round(canvasY) };
   }, [transform.scale, transform.translateX, transform.translateY]);
 
   // 检查点是否在标注内
@@ -243,35 +256,20 @@ export const useImageViewer = ({
         setSelectedAnnotation(null);
       }
     } else if (selectedTool && selectedTool !== 'select') {
-      console.log('Using drawing tool:', selectedTool);
+      console.log('Using drawing tool:', selectedTool, 'at point:', { x, y });
       const result = toolManagerRef.current.handleMouseDown({ x, y });
-      console.log('Tool result:', result);
-      setShouldDraw(result.shouldDraw);
+      console.log('Tool mouse down result:', result);
       
-      // 立即重绘以显示预览
+      // 更新工具状态
+      toolStateRef.current.isDrawing = result.shouldDraw;
+      toolStateRef.current.lastUpdate = Date.now();
+      
+      // 强制重绘以显示预览
       if (result.shouldDraw) {
-        setTimeout(() => {
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 重新绘制图像和标注
-            if (imageObj) {
-              ctx.drawImage(imageObj, 0, 0, canvas.width, canvas.height);
-              
-              annotations.forEach(ann => {
-                toolManagerRef.current.drawAnnotation(ctx, ann, ann.id === selectedAnnotation?.id);
-              });
-              
-              // 绘制预览
-              toolManagerRef.current.drawPreview(ctx);
-            }
-          }
-        }, 0);
+        setForceRender(prev => prev + 1);
       }
     }
-  }, [isPanning, getCanvasCoordinates, selectedTool, getAnnotationAtPoint, imageObj, annotations, selectedAnnotation]);
+  }, [isPanning, getCanvasCoordinates, selectedTool, getAnnotationAtPoint]);
 
   const handleMouseMove = useCallback((e) => {
     if (isPanning && panStart.x !== 0 && panStart.y !== 0) {
@@ -322,32 +320,18 @@ export const useImageViewer = ({
       }
     } else if (selectedTool && selectedTool !== 'select') {
       const result = toolManagerRef.current.handleMouseMove({ x, y });
+      console.log('Tool mouse move result:', result);
+      
+      // 如果工具正在绘制，强制重绘
       if (result.shouldDraw) {
-        setShouldDraw(true);
-        
-        // 立即重绘以更新预览
-        setTimeout(() => {
-          const canvas = canvasRef.current;
-          if (canvas) {
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            if (imageObj) {
-              ctx.drawImage(imageObj, 0, 0, canvas.width, canvas.height);
-              
-              annotations.forEach(ann => {
-                toolManagerRef.current.drawAnnotation(ctx, ann, ann.id === selectedAnnotation?.id);
-              });
-              
-              toolManagerRef.current.drawPreview(ctx);
-            }
-          }
-        }, 0);
+        toolStateRef.current.isDrawing = true;
+        toolStateRef.current.lastUpdate = Date.now();
+        setForceRender(prev => prev + 1);
       }
     }
-  }, [isPanning, panStart, dragging, selectedAnnotation, dragOffset, onAnnotationUpdate, selectedTool, getCanvasCoordinates, imageObj, annotations]);
+  }, [isPanning, panStart, dragging, selectedAnnotation, dragOffset, onAnnotationUpdate, selectedTool, getCanvasCoordinates]);
 
-  // 在useImageViewer.js中修复样条曲线和自由手绘的处理
+  // 关键修复：鼠标释放事件
   const handleMouseUp = useCallback((e) => {
     console.log('Mouse up, selected tool:', selectedTool);
     
@@ -362,40 +346,67 @@ export const useImageViewer = ({
     const { x, y } = coords;
   
     if (selectedTool && selectedTool !== 'select') {
+      console.log('Processing tool mouse up for:', selectedTool);
       const result = toolManagerRef.current.handleMouseUp({ x, y });
       console.log('Tool mouse up result:', result);
       
-      if (result.shouldCreateAnnotation && result.annotationData && onAnnotationCreate) {
-        console.log('Creating annotation from mouse up:', result.annotationData);
-        onAnnotationCreate(result.annotationData);
+      // 处理标注创建
+      if (result.shouldCreateAnnotation) {
+        let annotationData = result.annotationData;
+        
+        // 如果没有annotationData，尝试从工具获取
+        if (!annotationData) {
+          const tool = toolManagerRef.current.getCurrentTool();
+          if (tool && tool.isValid()) {
+            annotationData = tool.getAnnotationData(
+              `${selectedTool.charAt(0).toUpperCase() + selectedTool.slice(1)} ROI ${annotations.length + 1}`,
+              color,
+              lineWidth
+            );
+          }
+        }
+        
+        // 如果有标注数据，创建它
+        if (annotationData && onAnnotationCreate) {
+          console.log('Creating annotation:', annotationData);
+          onAnnotationCreate(annotationData);
+        }
       }
       
+      // 重置工具
       if (result.resetTool) {
         const tool = toolManagerRef.current.getCurrentTool();
-        if (tool) tool.reset();
-        setShouldDraw(false);
+        if (tool) {
+          tool.reset();
+        }
+        toolManagerRef.current.pendingAnnotation = null;
       }
+      
+      // 更新工具状态
+      toolStateRef.current.isDrawing = false;
+      setForceRender(prev => prev + 1);
     }
 
     setDragging(false);
-  }, [isPanning, selectedTool, onAnnotationCreate, getCanvasCoordinates]);
+  }, [isPanning, selectedTool, onAnnotationCreate, getCanvasCoordinates, annotations.length, color, lineWidth]);
 
+  // 双击事件
   const handleDoubleClick = useCallback((e) => {
+    console.log('Double click, selected tool:', selectedTool);
+    
+    const coords = getCanvasCoordinates(e);
+    if (!coords) return;
+    
+    const { x, y } = coords;
+
     if (selectedTool === 'spline') {
       console.log('Spline double click');
-      const coords = getCanvasCoordinates(e);
-      if (!coords) return;
-    
-      const result = toolManagerRef.current.handleDoubleClick({ x: coords.x, y: coords.y });
+      const result = toolManagerRef.current.handleDoubleClick({ x, y });
       console.log('Spline double click result:', result);
     
       if (result.shouldCreateAnnotation && result.annotationData && onAnnotationCreate) {
         console.log('Creating annotation from double click:', result.annotationData);
         onAnnotationCreate(result.annotationData);
-      }
-    
-      if (result.resetTool) {
-        setShouldDraw(false);
       }
     }
   }, [selectedTool, onAnnotationCreate, getCanvasCoordinates]);
@@ -407,7 +418,10 @@ export const useImageViewer = ({
     if (isPanning) {
       setPanStart({ x: 0, y: 0 });
     }
-    setShouldDraw(false);
+    
+    // 重置工具状态
+    toolStateRef.current.isDrawing = false;
+    setForceRender(prev => prev + 1);
   }, [dragging, isPanning]);
 
   // Effects
@@ -435,6 +449,7 @@ export const useImageViewer = ({
           translateX: 0,
           translateY: 0
         });
+        setForceRender(prev => prev + 1);
       };
       img.onerror = (err) => {
         console.error('Failed to load image:', err);
@@ -476,7 +491,8 @@ export const useImageViewer = ({
           setSelectedAnnotation(null);
         } else if (selectedTool && selectedTool !== 'select') {
           toolManagerRef.current.resetAllTools();
-          setShouldDraw(false);
+          toolStateRef.current.isDrawing = false;
+          setForceRender(prev => prev + 1);
         }
       }
       
@@ -485,18 +501,19 @@ export const useImageViewer = ({
         e.preventDefault();
         console.log('Enter key pressed for spline');
         const tool = toolManagerRef.current.getCurrentTool();
-        if (tool && tool.isValid()) {
+        if (tool && tool.isValid() && onAnnotationCreate) {
           const annotationData = tool.getAnnotationData(
             `Spline ROI ${annotations.length + 1}`,
             color,
             lineWidth
           );
           console.log('Creating spline with Enter key:', annotationData);
-          if (annotationData && onAnnotationCreate) {
+          if (annotationData) {
             onAnnotationCreate(annotationData);
+            tool.reset();
+            toolStateRef.current.isDrawing = false;
+            setForceRender(prev => prev + 1);
           }
-          tool.reset();
-          setShouldDraw(false);
         }
       }
  
@@ -516,21 +533,11 @@ export const useImageViewer = ({
     };
   }, [selectedAnnotation, isPanning, selectedTool, onAnnotationDelete, handleZoomIn, handleZoomOut, handleReset, handlePanEnd, handlePanStart, annotations.length, color, lineWidth, onAnnotationCreate]);
 
-  // Update cursor
-  useEffect(() => {
-    const viewerContainer = containerRef.current;
-    if (viewerContainer) {
-      if (isPanning) {
-        viewerContainer.style.cursor = 'grabbing';
-      } else if (selectedTool === 'select') {
-        viewerContainer.style.cursor = dragging ? 'grabbing' : 'grab';
-      } else if (selectedTool && selectedTool !== 'select') {
-        viewerContainer.style.cursor = 'crosshair';
-      } else {
-        viewerContainer.style.cursor = 'default';
-      }
-    }
-  }, [isPanning, selectedTool, dragging]);
+  // 检查是否有正在进行的绘制
+  const isDrawing = useCallback(() => {
+    return toolStateRef.current.isDrawing || 
+           (toolManagerRef.current.currentTool && toolManagerRef.current.currentTool.drawing);
+  }, []);
 
   return {
     // Refs
@@ -546,7 +553,8 @@ export const useImageViewer = ({
     transform,
     isPanning,
     canvasSize,
-    shouldDraw,
+    shouldDraw: isDrawing(), // 关键修复：使用实时计算的绘制状态
+    forceRender, // 新增：强制重绘的触发器
     
     // Handlers
     handleMouseDown,

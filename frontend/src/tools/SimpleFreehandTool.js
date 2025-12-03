@@ -1,7 +1,7 @@
-// FreehandTool.js - 修复版本
+// SimpleFreehandTool.js - 放在 tools/ 目录下
 import { BaseAnnotationTool } from './BaseAnnotationTool';
 
-export class FreehandTool extends BaseAnnotationTool {
+export class SimpleFreehandTool extends BaseAnnotationTool {
   constructor() {
     super();
     this.type = 'freehand';
@@ -87,6 +87,11 @@ export class FreehandTool extends BaseAnnotationTool {
     return { shouldDraw: false };
   }
   
+  onDoubleClick(point, context) {
+    // 自由手绘不需要双击事件
+    return { shouldDraw: false };
+  }
+  
   draw(ctx, color, lineWidth) {
     if (this.points.length < 2) return;
     
@@ -143,6 +148,28 @@ export class FreehandTool extends BaseAnnotationTool {
   
   getAnnotationData(label, color, lineWidth) {
     // 已经在onMouseUp中处理
+    if (this.points.length >= 2) {
+      const firstPoint = this.points[0];
+      const lastPoint = this.points[this.points.length - 1];
+      const shouldClose = BaseAnnotationTool.pointDistance(lastPoint, firstPoint) < 15 || this.shouldAutoClose;
+      
+      const finalPoints = shouldClose ? [...this.points, this.points[0]] : this.points;
+      const simplifiedPoints = BaseAnnotationTool.simplifyPath(finalPoints, 2.0);
+      const isClosed = shouldClose && simplifiedPoints.length >= 3;
+      
+      return {
+        shape_type: 'freehand',
+        coordinates: { 
+          points: simplifiedPoints,
+          closed: isClosed,
+          area: isClosed ? BaseAnnotationTool.calculatePathArea(simplifiedPoints) : 0,
+          length: BaseAnnotationTool.calculatePathLength(simplifiedPoints)
+        },
+        label: label || `Freehand ROI ${isClosed ? '(Closed)' : ''}`,
+        color: color,
+        line_width: lineWidth
+      };
+    }
     return null;
   }
   
