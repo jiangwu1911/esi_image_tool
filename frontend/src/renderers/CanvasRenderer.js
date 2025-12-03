@@ -4,7 +4,7 @@ import { PathRenderer } from './PathRenderer';
 export const CanvasRenderer = {
   drawAll: (ctx, canvas, imageObj, annotations, selectedAnnotation, 
             lineWidth, color, startPoint = null, currentPoint = null, selectedTool = null,
-            splinePoints = null, freehandPoints = null) => {
+            splinePoints = null, freehandPoints = null, shouldAutoClose = false) => {
     
     if (!ctx || !canvas || !imageObj) return;
     
@@ -21,7 +21,7 @@ export const CanvasRenderer = {
     
     // 如果正在绘制，绘制预览
     if (selectedTool && selectedTool !== 'select') {
-      CanvasRenderer.drawPreview(ctx, selectedTool, startPoint, currentPoint, lineWidth, color, splinePoints, freehandPoints);
+      CanvasRenderer.drawPreview(ctx, selectedTool, startPoint, currentPoint, lineWidth, color, splinePoints, freehandPoints, shouldAutoClose);
     }
   },
   
@@ -65,14 +65,34 @@ export const CanvasRenderer = {
           if (isSelected && coords.closed) {
             ctx.fill();
           }
+          
+          // 绘制控制点
+          if (isSelected) {
+            coords.points.forEach(point => {
+              ctx.beginPath();
+              ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+              ctx.fillStyle = '#00ff00';
+              ctx.fill();
+            });
+          }
         }
         break;
       case 'freehand':
         if (coords.points && coords.points.length > 1) {
-          PathRenderer.drawFreehand(ctx, coords.points);
+          PathRenderer.drawFreehand(ctx, coords.points, coords.closed || false);
           ctx.stroke();
-          if (isSelected) {
+          if (isSelected && coords.closed) {
             ctx.fill();
+          }
+          
+          // 绘制控制点
+          if (isSelected) {
+            coords.points.forEach(point => {
+              ctx.beginPath();
+              ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+              ctx.fillStyle = '#00ff00';
+              ctx.fill();
+            });
           }
         }
         break;
@@ -90,7 +110,7 @@ export const CanvasRenderer = {
     ctx.setLineDash([]);
   },
   
-  drawPreview: (ctx, shapeType, startPoint, currentPoint, lineWidth, color, splinePoints, freehandPoints) => {
+  drawPreview: (ctx, shapeType, startPoint, currentPoint, lineWidth, color, splinePoints, freehandPoints, shouldAutoClose = false) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     ctx.fillStyle = `${color}20`;
@@ -127,6 +147,7 @@ export const CanvasRenderer = {
       case 'spline':
         if (splinePoints && splinePoints.length > 0) {
           ctx.setLineDash([5, 5]);
+          
           // 绘制点
           splinePoints.forEach((point, index) => {
             ctx.beginPath();
@@ -134,21 +155,96 @@ export const CanvasRenderer = {
             ctx.fillStyle = color;
             ctx.fill();
             
-            // 绘制连接线
+            // 绘制连接线（直线）
             if (index > 0) {
               ctx.beginPath();
               ctx.moveTo(splinePoints[index - 1].x, splinePoints[index - 1].y);
               ctx.lineTo(point.x, point.y);
               ctx.strokeStyle = `${color}80`;
+              ctx.lineWidth = 1;
               ctx.stroke();
+              ctx.lineWidth = lineWidth;
             }
           });
           
-          // 绘制样条曲线
+          // 绘制样条曲线预览（检查是否应该自动闭合）
           if (splinePoints.length > 1) {
-            PathRenderer.drawSpline(ctx, splinePoints, false);
-            ctx.strokeStyle = color;
-            ctx.stroke();
+            const shouldClosePreview = splinePoints.length >= 3 && 
+              PathRenderer.shouldAutoClose(splinePoints, 20);
+            
+            // 绘制样条曲线段
+            for (let i = 0; i < splinePoints.length - 1; i++) {
+              const p0 = i > 0 ? splinePoints[i - 1] : splinePoints[i];
+              const p1 = splinePoints[i];
+              const p2 = splinePoints[i + 1];
+              const p3 = i < splinePoints.length - 2 ? splinePoints[i + 2] : splinePoints[i + 1];
+              
+              ctx.beginPath();
+              for (let t = 0; t <= 1; t += 0.05) {
+                const t2 = t * t;
+                const t3 = t2 * t;
+                
+                const x = 0.5 * ((2 * p1.x) +
+                               (-p0.x + p2.x) * t +
+                               (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+                               (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+                
+                const y = 0.5 * ((2 * p1.y) +
+                               (-p0.y + p2.y) * t +
+                               (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+                               (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+                
+                if (t === 0) {
+                  ctx.moveTo(x, y);
+                } else {
+                  ctx.lineTo(x, y);
+                }
+              }
+              ctx.strokeStyle = color;
+              ctx.stroke();
+            }
+            
+            // 如果接近闭合，绘制闭合段并显示提示
+            if (shouldClosePreview && splinePoints.length >= 3) {
+              const p0 = splinePoints[splinePoints.length - 2];
+              const p1 = splinePoints[splinePoints.length - 1];
+              const p2 = splinePoints[0];
+              const p3 = splinePoints[1];
+              
+              ctx.beginPath();
+              for (let t = 0; t <= 1; t += 0.05) {
+                const t2 = t * t;
+                const t3 = t2 * t;
+                
+                const x = 0.5 * ((2 * p1.x) +
+                               (-p0.x + p2.x) * t +
+                               (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+                               (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+                
+                const y = 0.5 * ((2 * p1.y) +
+                               (-p0.y + p2.y) * t +
+                               (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+                               (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+                
+                if (t === 0) {
+                  ctx.moveTo(x, y);
+                } else {
+                  ctx.lineTo(x, y);
+                }
+              }
+              ctx.strokeStyle = color;
+              ctx.stroke();
+              
+              // 显示绿色提示点
+              ctx.beginPath();
+              ctx.arc(splinePoints[0].x, splinePoints[0].y, 6, 0, 2 * Math.PI);
+              ctx.fillStyle = '#00ff00';
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              ctx.lineWidth = lineWidth;
+            }
           }
           ctx.setLineDash([]);
         }
@@ -156,7 +252,33 @@ export const CanvasRenderer = {
       case 'freehand':
         if (freehandPoints && freehandPoints.length > 1) {
           ctx.setLineDash([5, 5]);
-          PathRenderer.drawFreehand(ctx, freehandPoints);
+          
+          // 绘制自由手绘预览（检查是否应该自动闭合）
+          const shouldClosePreview = shouldAutoClose || 
+            (freehandPoints.length >= 10 && PathRenderer.shouldAutoClose(freehandPoints, 15));
+          
+          ctx.beginPath();
+          ctx.moveTo(freehandPoints[0].x, freehandPoints[0].y);
+          
+          for (let i = 1; i < freehandPoints.length; i++) {
+            ctx.lineTo(freehandPoints[i].x, freehandPoints[i].y);
+          }
+          
+          // 如果应该闭合，连接到起点
+          if (shouldClosePreview) {
+            ctx.lineTo(freehandPoints[0].x, freehandPoints[0].y);
+            
+            // 显示绿色提示点
+            ctx.beginPath();
+            ctx.arc(freehandPoints[0].x, freehandPoints[0].y, 6, 0, 2 * Math.PI);
+            ctx.fillStyle = '#00ff00';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.lineWidth = lineWidth;
+          }
+          
           ctx.stroke();
           ctx.setLineDash([]);
         }

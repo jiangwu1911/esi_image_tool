@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import TreeView from './components/TreeView';
 import ImageViewer from './components/ImageViewer';
-import AnnotationControls from './components/AnnotationControls';
+import ToolSelector from './components/ToolSelector'; // 注意：这里应该是 ToolSelector，不是 AnnotationControls
 import FileUpload from './components/FileUpload';
 import LanguageSelector from './components/LanguageSelector';
 import { getAnnotations, createAnnotation, deleteAnnotation, updateAnnotation } from './services/api';
@@ -116,7 +116,8 @@ function App() {
         
         {/* 右侧栏 - 标注工具 */}
         <div className="right-sidebar">
-          <AnnotationControls
+          {/* 这里使用 ToolSelector 而不是 AnnotationControls */}
+          <ToolSelector
             selectedTool={selectedTool}
             onToolSelect={setSelectedTool}
             lineWidth={lineWidth}
